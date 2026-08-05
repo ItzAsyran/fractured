@@ -5,6 +5,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.monster.Slime;
@@ -25,6 +26,7 @@ public final class SlimeFormVisuals {
     private static final String DORMANT_SUFFIX = ".dormant";
     private static final Map<UUID, UUID> DORMANT_SLIMES = new HashMap<>();
     private static final Map<UUID, ServerPlayer> PENDING_DORMANT_REMOVALS = new HashMap<>();
+    private static final Map<UUID, Long> AMBIENT_PARTICLE_TICKS = new HashMap<>();
 
     private SlimeFormVisuals() {
     }
@@ -32,6 +34,11 @@ public final class SlimeFormVisuals {
     public static void tick(ServerPlayer player) {
         boolean sleeping = SlimeFormState.isActive(player) && player.isSleeping();
         boolean dormant = player.getTags().contains(SlimeFormMod.SLIME_DORMANT_TAG);
+        if (SlimeFormState.isActive(player) && !sleeping && !dormant) {
+            tickAmbientParticles(player);
+        } else if (!SlimeFormState.isActive(player)) {
+            AMBIENT_PARTICLE_TICKS.remove(player.getUUID());
+        }
         if (sleeping || dormant) {
             String tag = visualTag(player, dormant);
             ServerLevel level = player.level();
@@ -58,6 +65,28 @@ public final class SlimeFormVisuals {
             remove(player, false);
             remove(player, true);
         }
+    }
+
+    private static void tickAmbientParticles(ServerPlayer player) {
+        long now = player.level().getGameTime();
+        long last = AMBIENT_PARTICLE_TICKS.getOrDefault(player.getUUID(), Long.MIN_VALUE);
+        boolean moving = player.getDeltaMovement().horizontalDistanceSqr() > 0.0001D;
+        long interval = moving ? 4L : 20L;
+        if (now - last < interval) {
+            return;
+        }
+        AMBIENT_PARTICLE_TICKS.put(player.getUUID(), now);
+        ServerLevel level = player.level();
+        level.sendParticles(
+                ParticleTypes.ITEM_SLIME,
+                player.getX(),
+                player.getY() + 0.15D,
+                player.getZ(),
+                moving ? 2 : 1,
+                0.22D,
+                0.08D,
+                0.22D,
+                0.01D);
     }
 
     private static Vec3 sleepingSlimePosition(ServerPlayer player) {
@@ -89,6 +118,7 @@ public final class SlimeFormVisuals {
         if (dormant) {
             DORMANT_SLIMES.remove(player.getUUID());
         }
+        AMBIENT_PARTICLE_TICKS.remove(player.getUUID());
     }
 
     public static void queueDormantRemoval(ServerPlayer player) {

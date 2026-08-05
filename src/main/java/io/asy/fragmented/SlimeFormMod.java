@@ -23,10 +23,12 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.MobCategory;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.monster.Slime;
+import net.minecraft.world.entity.monster.Enemy;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.AABB;
@@ -41,8 +43,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.List;
@@ -54,6 +58,7 @@ public class SlimeFormMod implements ModInitializer {
     public static final String MOD_ID = "slimeform";
     public static final String SLIME_FORM_TAG = "slimeform.active";
     public static final String SLIME_DORMANT_TAG = "slimeform.dormant";
+    private static final String RECOVERY_LINEAGE_TAG_PREFIX = "slimeform.recovery.";
     public static final int RECOVERY_COUNTDOWN_INTERVAL_TICKS = 20;
     public static final int RECOVERY_PROGRESS_BAR_WIDTH = 20;
     public static final int REFORM_PARTICLE_COUNT = 40;
@@ -301,7 +306,25 @@ public class SlimeFormMod implements ModInitializer {
                 * RECOVERY_COUNTDOWN_INTERVAL_TICKS;
     }
 
-    public static void beginRecovery(ServerPlayer player, List<Slime> splitSlimes, GameType previousGameMode) {
+    public static String recoveryLineageTag(UUID playerId) {
+        return RECOVERY_LINEAGE_TAG_PREFIX + playerId;
+    }
+
+    public static boolean hasRecoveryLineage(Slime slime) {
+        return slime.getTags().stream().anyMatch(tag -> tag.startsWith(RECOVERY_LINEAGE_TAG_PREFIX));
+    }
+
+    public static void copyRecoveryLineage(Slime parent, Slime child) {
+        parent.getTags().stream()
+                .filter(tag -> tag.startsWith(RECOVERY_LINEAGE_TAG_PREFIX))
+                .forEach(child::addTag);
+    }
+
+    public static void beginRecovery(
+            ServerPlayer player,
+            List<Slime> splitSlimes,
+            GameType previousGameMode,
+            LivingEntity originalKiller) {
         if (splitSlimes.isEmpty()) {
             return;
         }
@@ -311,6 +334,11 @@ public class SlimeFormMod implements ModInitializer {
         RECOVERIES.put(player.getUUID(), new Recovery(
                 cameraTarget.getUUID(),
                 splitSlimes.stream().map(Entity::getUUID).toList(),
+                splitSlimes.get(0).getTags().stream()
+                        .filter(tag -> tag.startsWith(RECOVERY_LINEAGE_TAG_PREFIX))
+                        .findFirst()
+                        .orElseThrow(),
+                originalKiller == null ? null : originalKiller.getUUID(),
                 player.level().dimension(),
                 player.getX(),
                 player.getY(),
@@ -347,6 +375,8 @@ public class SlimeFormMod implements ModInitializer {
                 completeFailedRecovery(server, player, recovery, iterator);
                 continue;
             }
+            continueRecoveryDefense(server, recovery, survivingSlimes);
+            coordinateRecoveryAssistance(recovery, survivingSlimes);
             player.setCamera(survivingSlimes.get(0));
 
             recovery.ticksRemaining--;
@@ -392,6 +422,11 @@ public class SlimeFormMod implements ModInitializer {
                     recovery.xRot(),
                     false);
             replacement.setCamera(replacement);
+            int strongestFragmentSize = survivingSlimes.stream()
+                    .mapToInt(Slime::getSize)
+                    .max()
+                    .orElse(SlimeFormState.MIN_SIZE);
+            SlimeFormState.setSize(replacement, strongestFragmentSize + 1);
             SlimeFormState.applyHealth(replacement, true);
             restoreInventory(replacement, recovery.inventory());
             cleanupSplitSlimes(server, recovery);
@@ -541,6 +576,7 @@ public class SlimeFormMod implements ModInitializer {
         replacement.setCamera(replacement);
         SlimeFormState.setSize(replacement, SlimeFormState.getMaxSize());
         SlimeFormState.applyHealth(replacement, true);
+        playRecoveryFailureEffects((ServerLevel) replacement.level(), replacement);
         dropInventory(server, recovery);
         cleanupSplitSlimes(server, recovery);
         replacement.sendSystemMessage(
@@ -560,13 +596,201 @@ public class SlimeFormMod implements ModInitializer {
         }
 
         List<Slime> surviving = new ArrayList<>();
-        for (UUID slimeId : recovery.splitSlimes()) {
-            Entity entity = level.getEntity(slimeId);
-            if (entity instanceof Slime slime && slime.isAlive() && !slime.isRemoved()) {
+        String lineageTag = recovery.lineageTag();
+        for (Entity entity : level.getAllEntities()) {
+            if (entity instanceof Slime slime
+                    && slime.getTags().contains(lineageTag)
+                    && slime.isAlive()
+                    && !slime.isRemoved()) {
                 surviving.add(slime);
             }
         }
         return surviving;
+    }
+
+    private static void continueRecoveryDefense(
+            MinecraftServer server,
+            Recovery recovery,
+            List<Slime> survivingSlimes) {
+        UUID originalKillerId = recovery.originalKillerId();
+        if (originalKillerId == null || recovery.postAvenging()) {
+            if (recovery.postAvenging()) {
+                commandRecoverySlimesToAttackHostiles(survivingSlimes);
+            }
+            return;
+        }
+
+        ServerLevel level = server.getLevel(recovery.dimension());
+        if (level == null) {
+            return;
+        }
+
+        Entity originalKiller = level.getEntity(originalKillerId);
+        if (originalKiller instanceof LivingEntity living && living.isAlive()) {
+            return;
+        }
+
+        recovery.setPostAvenging();
+        commandRecoverySlimesToAttackHostiles(survivingSlimes);
+    }
+
+    private static void commandRecoverySlimesToAttackHostiles(List<Slime> survivingSlimes) {
+        List<Slime> attackingSlimes = survivingSlimes.stream()
+                .filter(slime -> slime.getSize() > SlimeFormState.MIN_SIZE)
+                .toList();
+        if (attackingSlimes.isEmpty()) {
+            return;
+        }
+
+        LivingEntity sharedTarget = attackingSlimes.stream()
+                .map(Slime::getTarget)
+                .filter(SlimeFormMod::isRecoveryHostile)
+                .findFirst()
+                .orElse(null);
+
+        if (sharedTarget == null) {
+            double nearestDistance = Double.MAX_VALUE;
+            for (Slime slime : attackingSlimes) {
+                for (Mob mob : slime.level().getEntitiesOfClass(
+                        Mob.class,
+                        slime.getBoundingBox().inflate(32.0D),
+                        SlimeFormMod::isRecoveryHostile)) {
+                    double distance = slime.distanceToSqr(mob);
+                    if (distance < nearestDistance) {
+                        sharedTarget = mob;
+                        nearestDistance = distance;
+                    }
+                }
+            }
+        }
+
+        if (sharedTarget == null) {
+            return;
+        }
+
+        for (Slime slime : attackingSlimes) {
+            slime.setTarget(sharedTarget);
+        }
+    }
+
+    private static void coordinateRecoveryAssistance(
+            Recovery recovery,
+            List<Slime> survivingSlimes) {
+        LivingEntity sharedTarget = findRecoveryHostileTarget(survivingSlimes);
+        if (sharedTarget != null) {
+            for (Slime slime : survivingSlimes) {
+                if (slime.getSize() > SlimeFormState.MIN_SIZE) {
+                    slime.setTarget(sharedTarget);
+                } else {
+                    slime.setTarget(null);
+                }
+            }
+            assistNearbyNormalSlimes(recovery, survivingSlimes, sharedTarget);
+        }
+
+        maintainSizeOneFleeing(survivingSlimes);
+    }
+
+    private static LivingEntity findRecoveryHostileTarget(List<Slime> survivingSlimes) {
+        LivingEntity currentTarget = survivingSlimes.stream()
+                .filter(slime -> slime.getSize() > SlimeFormState.MIN_SIZE)
+                .map(Slime::getTarget)
+                .filter(SlimeFormMod::isRecoveryHostile)
+                .findFirst()
+                .orElse(null);
+        if (currentTarget != null) {
+            return currentTarget;
+        }
+
+        double nearestDistance = Double.MAX_VALUE;
+        LivingEntity nearest = null;
+        for (Slime splitSlime : survivingSlimes) {
+            AABB area = splitSlime.getBoundingBox().inflate(15.0D);
+            for (Mob mob : splitSlime.level().getEntitiesOfClass(
+                    Mob.class,
+                    area,
+                    SlimeFormMod::isRecoveryHostile)) {
+                double distance = splitSlime.distanceToSqr(mob);
+                if (distance < nearestDistance) {
+                    nearest = mob;
+                    nearestDistance = distance;
+                }
+            }
+
+            for (Slime nearbySlime : splitSlime.level().getEntitiesOfClass(
+                    Slime.class,
+                    area,
+                    slime -> isRecoveryHostile(slime.getTarget()))) {
+                LivingEntity target = nearbySlime.getTarget();
+                double distance = splitSlime.distanceToSqr(nearbySlime);
+                if (target != null && distance < nearestDistance) {
+                    nearest = target;
+                    nearestDistance = distance;
+                }
+            }
+        }
+        return nearest;
+    }
+
+    private static void assistNearbyNormalSlimes(
+            Recovery recovery,
+            List<Slime> survivingSlimes,
+            LivingEntity target) {
+        for (Slime splitSlime : survivingSlimes) {
+            for (Slime nearbySlime : splitSlime.level().getEntitiesOfClass(
+                    Slime.class,
+                    splitSlime.getBoundingBox().inflate(15.0D),
+                    slime -> slime.isAlive()
+                            && slime.getSize() > SlimeFormState.MIN_SIZE
+                            && (!hasRecoveryLineage(slime)
+                            || survivingSlimes.contains(slime)))) {
+                nearbySlime.setTarget(target);
+                if (!hasRecoveryLineage(nearbySlime)) {
+                    recovery.assistedSlimeIds().add(nearbySlime.getUUID());
+                }
+            }
+        }
+    }
+
+    private static void maintainSizeOneFleeing(List<Slime> survivingSlimes) {
+        for (Slime slime : survivingSlimes) {
+            if (slime.getSize() != SlimeFormState.MIN_SIZE) {
+                continue;
+            }
+
+            slime.setTarget(null);
+            Mob threat = slime.level().getEntitiesOfClass(
+                            Mob.class,
+                            slime.getBoundingBox().inflate(15.0D),
+                            mob -> isRecoveryHostile(mob))
+                    .stream()
+                    .min(Comparator.comparingDouble(slime::distanceToSqr))
+                    .orElse(null);
+            if (threat == null) {
+                continue;
+            }
+
+            if (!slime.getNavigation().isDone() && !slime.getNavigation().isStuck()) {
+                continue;
+            }
+
+            Vec3 away = slime.position().subtract(threat.position());
+            double angle = Math.atan2(away.z, away.x);
+            if (away.horizontalDistanceSqr() < 0.0001D) {
+                angle = slime.getRandom().nextDouble() * Math.PI * 2.0D;
+            }
+            angle += (slime.getRandom().nextDouble() - 0.5D) * 1.2D;
+            double distance = 8.0D + slime.getRandom().nextDouble() * 6.0D;
+            double destinationX = slime.getX() + Math.cos(angle) * distance;
+            double destinationZ = slime.getZ() + Math.sin(angle) * distance;
+            slime.getNavigation().moveTo(destinationX, slime.getY(), destinationZ, 1.2D);
+        }
+    }
+
+    private static boolean isRecoveryHostile(LivingEntity entity) {
+        return entity instanceof Enemy
+                && !(entity instanceof Slime)
+                && entity.isAlive();
     }
 
     private static void updateLastKnownSplitPosition(MinecraftServer server, Recovery recovery) {
@@ -575,10 +799,10 @@ public class SlimeFormMod implements ModInitializer {
             return;
         }
 
-        for (UUID slimeId : recovery.splitSlimes()) {
-            Entity entity = level.getEntity(slimeId);
-            if (entity != null) {
-                recovery.lastKnownPosition = entity.position();
+        String lineageTag = recovery.lineageTag();
+        for (Entity entity : level.getAllEntities()) {
+            if (entity instanceof Slime slime && slime.getTags().contains(lineageTag)) {
+                recovery.lastKnownPosition = slime.position();
             }
         }
     }
@@ -690,6 +914,66 @@ public class SlimeFormMod implements ModInitializer {
                 1.0F);
     }
 
+    public static void playSlimePlayerEffect(ServerPlayer player, int particleCount, float pitch) {
+        ServerLevel level = player.level();
+        level.sendParticles(
+                ParticleTypes.ITEM_SLIME,
+                player.getX(),
+                player.getY() + 0.7D,
+                player.getZ(),
+                particleCount,
+                0.35D,
+                0.5D,
+                0.35D,
+                0.08D);
+        player.playSound(SoundEvents.SLIME_SQUISH, 1.0F, pitch);
+    }
+
+    public static void playSlimeFragmentSpawnEffects(Slime slime) {
+        ServerLevel level = (ServerLevel) slime.level();
+        level.sendParticles(
+                ParticleTypes.ITEM_SLIME,
+                slime.getX(),
+                slime.getY() + 0.35D,
+                slime.getZ(),
+                8,
+                0.18D,
+                0.12D,
+                0.18D,
+                0.04D);
+        level.playSound(
+                null,
+                slime.getX(),
+                slime.getY(),
+                slime.getZ(),
+                SoundEvents.SLIME_JUMP,
+                SoundSource.HOSTILE,
+                0.7F,
+                1.2F);
+    }
+
+    private static void playRecoveryFailureEffects(ServerLevel level, ServerPlayer player) {
+        level.sendParticles(
+                ParticleTypes.ITEM_SLIME,
+                player.getX(),
+                player.getY() + 0.7D,
+                player.getZ(),
+                24,
+                0.45D,
+                0.55D,
+                0.45D,
+                0.06D);
+        level.playSound(
+                null,
+                player.getX(),
+                player.getY(),
+                player.getZ(),
+                SoundEvents.SLIME_SQUISH,
+                SoundSource.PLAYERS,
+                1.0F,
+                0.65F);
+    }
+
     private static int showSlimeStatus(ServerPlayer player) {
         boolean active = SlimeFormState.isActive(player);
         int size = SlimeFormState.getSize(player);
@@ -728,9 +1012,21 @@ public class SlimeFormMod implements ModInitializer {
         }
 
         int removed = 0;
-        for (UUID slimeId : recovery.splitSlimes()) {
-            Entity slime = level.getEntity(slimeId);
-            if (slime != null && !slime.isRemoved()) {
+        String lineageTag = recovery.lineageTag();
+        for (UUID assistedId : recovery.assistedSlimeIds()) {
+            Entity entity = level.getEntity(assistedId);
+            if (entity instanceof Slime slime && !slime.isRemoved()) {
+                slime.setTarget(null);
+            }
+        }
+        List<Entity> entities = new ArrayList<>();
+        for (Entity entity : level.getAllEntities()) {
+            entities.add(entity);
+        }
+        for (Entity entity : entities) {
+            if (entity instanceof Slime slime
+                    && slime.getTags().contains(lineageTag)
+                    && !slime.isRemoved()) {
                 slime.discard();
                 removed++;
             }
@@ -752,7 +1048,7 @@ public class SlimeFormMod implements ModInitializer {
         int commanded = 0;
         AABB area = player.getBoundingBox().inflate(32.0D);
         for (Slime slime : player.level().getEntitiesOfClass(Slime.class, area)) {
-            if (slime.isAlliedTo(player)) {
+            if (slime.getSize() > SlimeFormState.MIN_SIZE && slime.isAlliedTo(player)) {
                 slime.setTarget(target);
                 commanded++;
             }
@@ -770,6 +1066,8 @@ public class SlimeFormMod implements ModInitializer {
     private static final class Recovery {
         private final UUID cameraTarget;
         private final List<UUID> splitSlimes;
+        private final String lineageTag;
+        private final UUID originalKillerId;
         private final ResourceKey<Level> dimension;
         private final double x;
         private final double y;
@@ -781,9 +1079,13 @@ public class SlimeFormMod implements ModInitializer {
         private final int totalTicks;
         private final InventorySnapshot inventory;
         private Vec3 lastKnownPosition;
+        private boolean postAvenging;
+        private final Set<UUID> assistedSlimeIds = new HashSet<>();
 
         private Recovery(UUID cameraTarget,
                          List<UUID> splitSlimes,
+                         String lineageTag,
+                         UUID originalKillerId,
                          ResourceKey<Level> dimension,
                          double x,
                          double y,
@@ -795,6 +1097,8 @@ public class SlimeFormMod implements ModInitializer {
                          InventorySnapshot inventory) {
             this.cameraTarget = cameraTarget;
             this.splitSlimes = splitSlimes;
+            this.lineageTag = lineageTag;
+            this.originalKillerId = originalKillerId;
             this.dimension = dimension;
             this.x = x;
             this.y = y;
@@ -814,6 +1118,26 @@ public class SlimeFormMod implements ModInitializer {
 
         private List<UUID> splitSlimes() {
             return splitSlimes;
+        }
+
+        private String lineageTag() {
+            return lineageTag;
+        }
+
+        private UUID originalKillerId() {
+            return originalKillerId;
+        }
+
+        private boolean postAvenging() {
+            return postAvenging;
+        }
+
+        private void setPostAvenging() {
+            postAvenging = true;
+        }
+
+        private Set<UUID> assistedSlimeIds() {
+            return assistedSlimeIds;
         }
 
         private GameType previousGameMode() {

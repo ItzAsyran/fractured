@@ -6,6 +6,7 @@
 		"SlimeTargetingMixin",
 		"SlimeAllianceMixin",
 		"SlimeMobTargetMixin",
+		"SlimeLineageMixin",
 		"SlimeCombatMixin",
 		"SlimeFormPlayerMixin",
 		"SlimeFormWaterMixin",

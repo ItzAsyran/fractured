@@ -53,8 +53,11 @@ public abstract class SlimePlayerLifecycleMixin {
             return;
         }
 
-        if (source.getEntity() instanceof LivingEntity attacker) {
-            SlimeFormMod.commandNearbySlimesToAttack(player, attacker);
+        LivingEntity originalKiller = source.getEntity() instanceof LivingEntity attacker
+                ? attacker
+                : null;
+        if (originalKiller != null) {
+            SlimeFormMod.commandNearbySlimesToAttack(player, originalKiller);
         }
 
         int currentSize = SlimeFormState.getSize(player);
@@ -78,7 +81,8 @@ public abstract class SlimePlayerLifecycleMixin {
 
         List<Slime> splitSlimes = spawnSplitSlimes(player, nextSize, splitCount);
         if (!splitSlimes.isEmpty()) {
-            SlimeFormMod.beginRecovery(player, splitSlimes, previousGameMode);
+            SlimeFormMod.playSlimePlayerEffect(player, 28, 0.75F);
+            SlimeFormMod.beginRecovery(player, splitSlimes, previousGameMode, originalKiller);
             player.setGameMode(GameType.SPECTATOR);
             player.setCamera(splitSlimes.get(0));
             player.connection.send(new ClientboundGameEventPacket(
@@ -120,11 +124,13 @@ public abstract class SlimePlayerLifecycleMixin {
             }
             double angle = (Math.PI * 2.0D * index) / count;
             slime.setSize(size, true);
+            slime.addTag(SlimeFormMod.recoveryLineageTag(player.getUUID()));
             slime.setPos(
                     player.getX() + Math.cos(angle) * 0.75D,
                     player.getY() + 0.1D,
                     player.getZ() + Math.sin(angle) * 0.75D);
             level.addFreshEntity(slime);
+            SlimeFormMod.playSlimeFragmentSpawnEffects(slime);
             splitSlimes.add(slime);
         }
         return splitSlimes;

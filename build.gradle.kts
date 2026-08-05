@@ -3,31 +3,7 @@ plugins {
 	`maven-publish`
 }
 
-val packageTasks = setOf("build", "assemble", "jar", "remapJar", "publish")
-val requestedTaskNames = gradle.startParameter.taskNames
-        .map { it.substringAfterLast(':') }
-val shouldIncrementModVersion = requestedTaskNames.any { it in packageTasks }
-val modVersionPropertyFile = rootProject.file("gradle.properties")
-val configuredModVersion = providers.gradleProperty("mod_version").get()
-
-fun incrementPatchVersion(version: String): String {
-	val match = Regex("^(\\d+)\\.(\\d+)\\.(\\d+)$").matchEntire(version)
-		?: error("mod_version must use major.minor.patch format, but was '$version'")
-	return "${match.groupValues[1]}.${match.groupValues[2]}.${match.groupValues[3].toInt() + 1}"
-}
-
-val modVersion = if (shouldIncrementModVersion) {
-	val nextVersion = incrementPatchVersion(configuredModVersion)
-	val propertiesText = modVersionPropertyFile.readText()
-	val versionLine = Regex("(?m)^mod_version=.*$").find(propertiesText)
-		?: error("Could not find mod_version in ${modVersionPropertyFile.path}")
-	modVersionPropertyFile.writeText(
-		propertiesText.replaceRange(versionLine.range, "mod_version=$nextVersion")
-	)
-	nextVersion
-} else {
-	configuredModVersion
-}
+val modVersion = providers.gradleProperty("mod_version").get()
 
 version = modVersion
 group = providers.gradleProperty("maven_group").get()
