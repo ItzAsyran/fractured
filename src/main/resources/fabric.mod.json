@@ -1,0 +1,41 @@
+{
+	"schemaVersion": 1,
+	"id": "slimeform",
+	"version": "${version}",
+	"name": "Fractured",
+	"description": "lorem ipsum, duh..",
+	"authors": [
+		"asy_cherry"
+	],
+	"contact": {
+		"homepage": "https://fabricmc.net/",
+		"sources": "https://github.com/FabricMC/fabric-example-mod"
+	},
+	"license": "CC0-1.0",
+	"icon": "icon.png",
+	"environment": "*",
+	"entrypoints": {
+		"main": [
+			"io.asy.fragmented.SlimeFormMod"
+		],
+		"client": [
+			"io.asy.fragmented.SlimeFormClient"
+		],
+		"modmenu": [
+			"io.asy.fragmented.SlimeFormModMenu"
+		]
+	},
+	"mixins": [
+		"slimeform.mixins.json"
+	],
+	"depends": {
+		"fabricloader": ">=0.19.3",
+		"minecraft": "~1.21.11",
+		"java": ">=21",
+		"fabric-api": "*",
+		"cloth-config": ">=21.11.151"
+	},
+	"suggests": {
+		"modmenu": ">=17.0.1-beta.1"
+	}
+}
