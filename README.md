@@ -11,7 +11,9 @@ Death is no longer the end. Upon dying, you will be split into smaller slime fra
 If they successfully slaughtered the target? you get to reform back. If they didn't? well back to spawnpoint you go with no inventory.
 
 Preview
-<video src="docs/video/respawn.webm" autoplay loop muted playsinline width="640"></video>
+![Respawn and reform preview](docs/video/respawn.gif)
+
+[Open the full-resolution WebM preview](docs/video/respawn.webm)
 
 
 ---
@@ -35,7 +37,9 @@ Slimeballs can be consumed to recover lost size.
 be a blob when u sleep~
 
 Preview
-<video src="docs/video/sleeping.webm" autoplay loop muted playsinline width="640"></video>
+![Sleeping transformation preview](docs/video/sleeping.gif)
+
+[Open the full-resolution WebM preview](docs/video/sleeping.webm)
 
 ---
 
