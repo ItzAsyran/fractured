@@ -18,11 +18,14 @@ public abstract class SlimeSleepingAvatarRendererMixin {
     @Inject(method = "extractRenderState", at = @At("TAIL"))
     private void slimeform$prepareSleepingSlime(
             Avatar avatar, AvatarRenderState state, float partialTick, CallbackInfo ci) {
-        boolean replace = avatar instanceof Player player
-                && SlimeFormState.isClientVisualSlimeForm(player)
-                && (player.isSleeping()
-                || state.hasPose(Pose.SLEEPING)
-                || SlimeFormMod.isDormant(player));
+        boolean replace = false;
+        if (avatar instanceof Player player) {
+            boolean dormant = SlimeFormMod.isDormant(player)
+                    || (player.isInvisible() && SlimeFormState.isClientVisualSlimeForm(player));
+            boolean sleeping = SlimeFormState.isClientVisualSlimeForm(player)
+                    && (player.isSleeping() || state.hasPose(Pose.SLEEPING));
+            replace = dormant || sleeping;
+        }
         ((SlimeSleepingStateAccess) state).slimeform$setReplaceWithSlime(replace);
     }
 }

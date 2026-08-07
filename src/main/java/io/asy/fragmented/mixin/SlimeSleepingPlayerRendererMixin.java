@@ -14,6 +14,7 @@ import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(AvatarRenderState.class)
 abstract class SlimeSleepingAvatarRenderStateMixin implements SlimeSleepingStateAccess {
@@ -33,6 +34,15 @@ abstract class SlimeSleepingAvatarRenderStateMixin implements SlimeSleepingState
 
 @Mixin(LivingEntityRenderer.class)
 public abstract class SlimeSleepingPlayerRendererMixin {
+    @Inject(method = "shouldRenderLayers", at = @At("HEAD"), cancellable = true)
+    private void slimeform$hideSleepingSlimeLayers(
+            LivingEntityRenderState state, CallbackInfoReturnable<Boolean> cir) {
+        if (state instanceof SlimeSleepingStateAccess sleepingState
+                && sleepingState.slimeform$shouldReplaceWithSlime()) {
+            cir.setReturnValue(false);
+        }
+    }
+
     @Inject(method = "submit", at = @At("HEAD"), cancellable = true)
     private void slimeform$renderSleepingSlime(
             LivingEntityRenderState state,

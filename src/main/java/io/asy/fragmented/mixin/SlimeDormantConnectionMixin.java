@@ -3,6 +3,7 @@ package io.asy.fragmented.mixin;
 import io.asy.fragmented.SlimeFormMod;
 import net.minecraft.network.protocol.game.ServerboundInteractPacket;
 import net.minecraft.network.protocol.game.ServerboundContainerClickPacket;
+import net.minecraft.network.protocol.game.ServerboundChatPacket;
 import net.minecraft.network.protocol.game.ServerboundPlayerCommandPacket;
 import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
 import net.minecraft.network.protocol.game.ServerboundSetCarriedItemPacket;
@@ -32,6 +33,14 @@ public abstract class SlimeDormantConnectionMixin {
     private void slimeform$action(ServerboundPlayerActionPacket packet, CallbackInfo ci) {
         if (!slimeform$blockIfDormant(ci)) {
             SlimeFormMod.recordActivity(((SlimeServerConnectionAccessor) this).slimeform$getPlayer());
+        }
+    }
+
+    @Inject(method = "handleChat", at = @At("HEAD"), cancellable = true)
+    private void slimeform$calibrationChat(ServerboundChatPacket packet, CallbackInfo ci) {
+        ServerPlayer player = ((SlimeServerConnectionAccessor) this).slimeform$getPlayer();
+        if (SlimeFormMod.handleCalibrationChat(player, packet.message())) {
+            ci.cancel();
         }
     }
 

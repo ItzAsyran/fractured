@@ -3,7 +3,13 @@ plugins {
 	`maven-publish`
 }
 
-val modVersion = providers.gradleProperty("mod_version").get()
+val modBaseVersion = providers.gradleProperty("mod_version").get()
+val gitCommitCount = runCatching {
+	providers.exec {
+		commandLine("git", "rev-list", "--count", "HEAD")
+	}.standardOutput.asText.get().trim()
+}.getOrDefault("0")
+val modVersion = "$modBaseVersion.$gitCommitCount"
 
 version = modVersion
 group = providers.gradleProperty("maven_group").get()

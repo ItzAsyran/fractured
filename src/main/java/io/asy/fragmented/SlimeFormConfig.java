@@ -11,6 +11,8 @@ public class SlimeFormConfig implements me.shedaniel.autoconfig.ConfigData {
     public static final int MAX_MAX_SLIME_SIZE = 10;
     public static final int MIN_SPLIT_DURATION_SECONDS = 1;
     public static final int MAX_SPLIT_DURATION_SECONDS = 300;
+    public static final int MIN_RECOVERY_REFORM_SAFETY_RADIUS = 1;
+    public static final int MAX_RECOVERY_REFORM_SAFETY_RADIUS = 32;
     public static final int MIN_SLIME_BALLS_REQUIRED = 1;
     public static final int MAX_SLIME_BALLS_REQUIRED = 64;
     public static final int MIN_PASSIVE_SPAWN_CHANCE = 0;
@@ -21,8 +23,16 @@ public class SlimeFormConfig implements me.shedaniel.autoconfig.ConfigData {
     public static final int MAX_MAX_NEARBY_SPAWNED_SLIMES = 16;
     public static final int MIN_AFK_INACTIVITY_SECONDS = 30;
     public static final int MAX_AFK_INACTIVITY_SECONDS = 3600;
-    public static final double MIN_RIDER_OFFSET = -1.0D;
-    public static final double MAX_RIDER_OFFSET = 1.0D;
+    public static final double MIN_RIDER_OFFSET = -4.0D;
+    public static final double MAX_RIDER_OFFSET = 5.0D;
+    public static final double MIN_ITEM_DISPLAY_OFFSET = -4.0D;
+    public static final double MAX_ITEM_DISPLAY_OFFSET = 5.0D;
+    public static final double MIN_ITEM_DISPLAY_SCALE = 0.05D;
+    public static final double MAX_ITEM_DISPLAY_SCALE = 2.0D;
+    public static final double MIN_ITEM_DISPLAY_ROTATION = -360.0D;
+    public static final double MAX_ITEM_DISPLAY_ROTATION = 360.0D;
+    public static final double MIN_ITEM_DISPLAY_BOB = 0.0D;
+    public static final double MAX_ITEM_DISPLAY_BOB = 1.0D;
 
     @ConfigEntry.Gui.Tooltip
     @ConfigEntry.BoundedDiscrete(min = MIN_MAX_SLIME_SIZE, max = MAX_MAX_SLIME_SIZE)
@@ -31,6 +41,24 @@ public class SlimeFormConfig implements me.shedaniel.autoconfig.ConfigData {
     @ConfigEntry.Gui.Tooltip
     @ConfigEntry.BoundedDiscrete(min = MIN_SPLIT_DURATION_SECONDS, max = MAX_SPLIT_DURATION_SECONDS)
     public int splitDurationSeconds = 30;
+
+    @ConfigEntry.Gui.Tooltip
+    public boolean recoveryFleePathDebug = false;
+
+    @ConfigEntry.Gui.Tooltip
+    public boolean recoveryFleeDangerDebug = false;
+
+    @ConfigEntry.Gui.Tooltip
+    public boolean recoveryLineageDebug = false;
+
+    @ConfigEntry.Gui.Tooltip
+    @ConfigEntry.BoundedDiscrete(
+            min = MIN_RECOVERY_REFORM_SAFETY_RADIUS,
+            max = MAX_RECOVERY_REFORM_SAFETY_RADIUS)
+    public int recoveryReformSafetyRadius = 12;
+
+    @ConfigEntry.Gui.Tooltip
+    public boolean recoveryHostileReformBlock = true;
 
     @ConfigEntry.Gui.Tooltip
     @ConfigEntry.BoundedDiscrete(min = MIN_SLIME_BALLS_REQUIRED, max = MAX_SLIME_BALLS_REQUIRED)
@@ -61,7 +89,24 @@ public class SlimeFormConfig implements me.shedaniel.autoconfig.ConfigData {
 
     public boolean afkDormantEnabled = true;
 
-    public boolean showAfkTimerDebug = false;
+    public boolean afkDormantDebug = false;
+
+    public boolean floatingItemDisplays = true;
+
+    public double itemMainHandOffsetX = 0.0D;
+    public double itemMainHandOffsetY = 0.0D;
+    public double itemMainHandOffsetZ = 0.0D;
+    public double itemOffHandOffsetX = 0.0D;
+    public double itemOffHandOffsetY = 0.0D;
+    public double itemOffHandOffsetZ = 0.0D;
+    public double itemDisplayScale = 0.3D;
+    public double itemDisplayRotationX = 90.0D;
+    public double itemDisplayRotationY = 0.0D;
+    public double itemDisplayRotationZ = 0.0D;
+    public double itemDisplayBobAmplitude = 0.01D;
+    public boolean itemDebugShowAxes = false;
+
+    public boolean experimentalFeaturesEnabled = false;
 
     @ConfigEntry.BoundedDiscrete(
             min = MIN_AFK_INACTIVITY_SECONDS,
@@ -76,12 +121,23 @@ public class SlimeFormConfig implements me.shedaniel.autoconfig.ConfigData {
         return AutoConfig.getConfigHolder(SlimeFormConfig.class).getConfig();
     }
 
+    public static void save() {
+        AutoConfig.getConfigHolder(SlimeFormConfig.class).save();
+    }
+
     public int effectiveMaxSlimeSize() {
         return clamp(maxSlimeSize, MIN_MAX_SLIME_SIZE, MAX_MAX_SLIME_SIZE);
     }
 
     public int effectiveSplitDurationSeconds() {
         return clamp(splitDurationSeconds, MIN_SPLIT_DURATION_SECONDS, MAX_SPLIT_DURATION_SECONDS);
+    }
+
+    public int effectiveRecoveryReformSafetyRadius() {
+        return clamp(
+                recoveryReformSafetyRadius,
+                MIN_RECOVERY_REFORM_SAFETY_RADIUS,
+                MAX_RECOVERY_REFORM_SAFETY_RADIUS);
     }
 
     public int effectiveSlimeBallsRequired() {
@@ -120,6 +176,50 @@ public class SlimeFormConfig implements me.shedaniel.autoconfig.ConfigData {
 
     public double effectiveRiderOffsetZ() {
         return clamp(riderOffsetZ, MIN_RIDER_OFFSET, MAX_RIDER_OFFSET);
+    }
+
+    public double effectiveItemMainHandOffsetX() {
+        return clamp(itemMainHandOffsetX, MIN_ITEM_DISPLAY_OFFSET, MAX_ITEM_DISPLAY_OFFSET);
+    }
+
+    public double effectiveItemMainHandOffsetY() {
+        return clamp(itemMainHandOffsetY, MIN_ITEM_DISPLAY_OFFSET, MAX_ITEM_DISPLAY_OFFSET);
+    }
+
+    public double effectiveItemMainHandOffsetZ() {
+        return clamp(itemMainHandOffsetZ, MIN_ITEM_DISPLAY_OFFSET, MAX_ITEM_DISPLAY_OFFSET);
+    }
+
+    public double effectiveItemOffHandOffsetX() {
+        return clamp(itemOffHandOffsetX, MIN_ITEM_DISPLAY_OFFSET, MAX_ITEM_DISPLAY_OFFSET);
+    }
+
+    public double effectiveItemOffHandOffsetY() {
+        return clamp(itemOffHandOffsetY, MIN_ITEM_DISPLAY_OFFSET, MAX_ITEM_DISPLAY_OFFSET);
+    }
+
+    public double effectiveItemOffHandOffsetZ() {
+        return clamp(itemOffHandOffsetZ, MIN_ITEM_DISPLAY_OFFSET, MAX_ITEM_DISPLAY_OFFSET);
+    }
+
+    public double effectiveItemDisplayScale() {
+        return clamp(itemDisplayScale, MIN_ITEM_DISPLAY_SCALE, MAX_ITEM_DISPLAY_SCALE);
+    }
+
+    public double effectiveItemDisplayRotationX() {
+        return clamp(itemDisplayRotationX, MIN_ITEM_DISPLAY_ROTATION, MAX_ITEM_DISPLAY_ROTATION);
+    }
+
+    public double effectiveItemDisplayRotationY() {
+        return clamp(itemDisplayRotationY, MIN_ITEM_DISPLAY_ROTATION, MAX_ITEM_DISPLAY_ROTATION);
+    }
+
+    public double effectiveItemDisplayRotationZ() {
+        return clamp(itemDisplayRotationZ, MIN_ITEM_DISPLAY_ROTATION, MAX_ITEM_DISPLAY_ROTATION);
+    }
+
+    public double effectiveItemDisplayBobAmplitude() {
+        return clamp(itemDisplayBobAmplitude, MIN_ITEM_DISPLAY_BOB, MAX_ITEM_DISPLAY_BOB);
     }
 
     private static int clamp(int value, int min, int max) {

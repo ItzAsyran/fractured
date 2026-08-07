@@ -1,8 +1,9 @@
 {
   "config.slimeform.title": "Slime Form Settings",
-  "config.slimeform.category.growth": "Growth & Progression",
+  "config.slimeform.category.slime_form": "Slime Form",
   "config.slimeform.category.recovery": "Recovery",
-  "config.slimeform.category.debug": "Debug",
+  "config.slimeform.category.visuals": "Visuals",
+  "config.slimeform.category.experimental": "Experimental",
   "config.slimeform.max_slime_size": "Maximum Slime Size",
   "config.slimeform.max_slime_size.tooltip": "The largest slime size the player can reach. Values range from 1 to 10.",
   "config.slimeform.slime_balls_required": "Slime Balls Required",
@@ -13,9 +14,21 @@
   "config.slimeform.rider_offset_y.tooltip": "Adjust the player's vertical position for each size above size 1. Enter a value from -1.0 to 1.0.",
   "config.slimeform.rider_offset_z": "Rider Offset Z per Size",
   "config.slimeform.rider_offset_z.tooltip": "Adjust the player's horizontal Z position for each size above size 1. Enter a value from -1.0 to 1.0.",
+  "config.slimeform.floating_item_displays": "Floating Invisible-State Items",
+  "config.slimeform.floating_item_displays.tooltip": "Show copied main-hand and off-hand items inside sleeping and dormant slimes.",
   "config.slimeform.split_duration": "Split Duration (Seconds)",
   "config.slimeform.split_duration.tooltip": "How long a split slime recovery lasts before the player reforms.",
-  "config.slimeform.category.activity": "Passive Slime Activity",
+  "config.slimeform.recovery_flee_path_debug": "Recovery Flee Path Debug",
+  "config.slimeform.recovery_flee_path_debug.tooltip": "Show the active recovery slime flee path and nearby hostile markers with particles.",
+  "config.slimeform.recovery_flee_danger_debug": "Recovery Flee Danger Bossbar",
+  "config.slimeform.recovery_flee_danger_debug.tooltip": "Show a bossbar for the nearest hostile mob within the recovery flee radius.",
+  "config.slimeform.recovery_lineage_debug": "Recovery Lineage Nametags",
+  "config.slimeform.recovery_lineage_debug.tooltip": "Show each recovery slime's shared lineage identifier and generation above it.",
+  "config.slimeform.recovery_reform_safety_radius": "Reform Safety Radius",
+  "config.slimeform.recovery_reform_safety_radius.tooltip": "Distance from hostile mobs that prevents size-1 recovery reforming.",
+  "config.slimeform.recovery_hostile_reform_block": "Block Reform Near Hostiles",
+  "config.slimeform.recovery_hostile_reform_block.tooltip": "Prevent size-1 recovery reforming while hostile mobs are within the safety radius.",
+  "config.slimeform.category.activity": "World Behavior",
   "config.slimeform.passive_spawning": "Passive Slime Spawning",
   "config.slimeform.passive_spawning.tooltip": "Allow slime-form players to attract occasional nearby slimes.",
   "config.slimeform.spawn_chance": "Spawn Chance (%)",
@@ -26,11 +39,51 @@
   "config.slimeform.max_nearby_slimes.tooltip": "Maximum number of slimes attracted by this mechanic near a player.",
   "config.slimeform.afk_enabled": "AFK Dormant Slime",
   "config.slimeform.afk_enabled.tooltip": "Transform inactive SlimeForm players into a protected dormant slime.",
-  "config.slimeform.afk_timer_debug": "Show AFK Timer (Debug)",
-  "config.slimeform.afk_timer_debug.tooltip": "Display the remaining time before AFK dormant mode activates.",
+  "config.slimeform.afk_debug": "AFK Dormant Countdown Debug",
+  "config.slimeform.afk_debug.tooltip": "Show the server-authoritative countdown to dormant mode above the hotbar.",
   "config.slimeform.afk_duration": "AFK Inactivity Duration (Seconds)",
   "config.slimeform.afk_duration.tooltip": "How long a SlimeForm player must remain inactive before becoming dormant. Dangerous or combat situations prevent activation.",
   "config.slimeform.category.water": "Water Behavior",
   "config.slimeform.water_behavior": "Slime Water Behavior",
   "config.slimeform.water_behavior.tooltip": "Make slime-form players sink slightly slower without preventing drowning."
+  ,"config.slimeform.item_main_hand_offset_x": "Main-Hand Item Offset X"
+  ,"config.slimeform.item_main_hand_offset_x.tooltip": "Adjust the main-hand item display's X position."
+  ,"config.slimeform.item_main_hand_offset_y": "Main-Hand Item Offset Y"
+  ,"config.slimeform.item_main_hand_offset_y.tooltip": "Adjust the main-hand item display's Y position."
+  ,"config.slimeform.item_main_hand_offset_z": "Main-Hand Item Offset Z"
+  ,"config.slimeform.item_main_hand_offset_z.tooltip": "Adjust the main-hand item display's Z position."
+  ,"config.slimeform.item_off_hand_offset_x": "Off-Hand Item Offset X"
+  ,"config.slimeform.item_off_hand_offset_x.tooltip": "Adjust the off-hand item display's X position."
+  ,"config.slimeform.item_off_hand_offset_y": "Off-Hand Item Offset Y"
+  ,"config.slimeform.item_off_hand_offset_y.tooltip": "Adjust the off-hand item display's Y position."
+  ,"config.slimeform.item_off_hand_offset_z": "Off-Hand Item Offset Z"
+  ,"config.slimeform.item_off_hand_offset_z.tooltip": "Adjust the off-hand item display's Z position."
+  ,"config.slimeform.item_display_scale": "Item Display Scale"
+  ,"config.slimeform.item_display_scale.tooltip": "Adjust the scale of floating item displays."
+  ,"config.slimeform.item_display_rotation_x": "Item Display Rotation X"
+  ,"config.slimeform.item_display_rotation_x.tooltip": "Adjust the item display's X rotation in degrees."
+  ,"config.slimeform.item_display_rotation_y": "Item Display Rotation Y"
+  ,"config.slimeform.item_display_rotation_y.tooltip": "Adjust the item display's Y rotation in degrees."
+  ,"config.slimeform.item_display_rotation_z": "Item Display Rotation Z"
+  ,"config.slimeform.item_display_rotation_z.tooltip": "Adjust the item display's Z rotation in degrees."
+  ,"config.slimeform.item_display_bob_amplitude": "Item Display Bob Amplitude"
+  ,"config.slimeform.item_display_bob_amplitude.tooltip": "Adjust how much floating item displays bob up and down."
+  ,"config.slimeform.item_debug_show_axes": "Show Item Display Axes"
+  ,"config.slimeform.item_debug_show_axes.tooltip": "Show debug particles marking item display axes."
+  ,"config.slimeform.visuals.main_hand_offset": "Main-Hand Offset"
+  ,"config.slimeform.visuals.off_hand_offset": "Off-Hand Offset"
+  ,"config.slimeform.visuals.transform": "Item Transform"
+  ,"config.slimeform.visuals.animation": "Item Animation"
+  ,"config.slimeform.experimental.enable": "Enable Experimental Features"
+  ,"config.slimeform.experimental.open": "Open Experimental Features"
+  ,"config.slimeform.experimental.disable": "Disable Experimental Features"
+  ,"config.slimeform.experimental.enable.tooltip": "Experimental features may be unstable, unfair, or game breaking."
+  ,"config.slimeform.experimental.disabled": "Experimental features are disabled. Enable them only if you accept the risks."
+  ,"config.slimeform.experimental.available": "No experimental features are available yet."
+  ,"config.slimeform.experimental.confirm.title": "Enable Experimental Features?"
+  ,"config.slimeform.experimental.confirm.message": "Experimental features is still early in development and may include game breaking or unfair gameplay."
+  ,"config.slimeform.experimental.yes": "Yes"
+  ,"config.slimeform.experimental.no": "No"
+  ,"config.slimeform.experimental.placeholder.title": "Experimental Features"
+  ,"config.slimeform.experimental.placeholder": "No experimental features are available yet."
 }

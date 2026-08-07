@@ -90,7 +90,7 @@ public final class SlimeFormState {
      */
     public static boolean shouldApplyRiderOffset(Player player) {
         if (isActive(player)) {
-            return getSize(player) >= 2;
+            return getSize(player) >= MIN_SIZE;
         }
 
         if (!player.level().isClientSide()) {

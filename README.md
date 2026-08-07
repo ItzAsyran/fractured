@@ -1,69 +1,48 @@
 # Fractured
 
-A mod that changes core Minecraft gameplay from being an ordinary player into a half-slime player.
-
+Fractured turns the player into a half-slime with custom growth, movement, damage, and recovery mechanics.
 
 ## Features
 
-### Split & Reform System
+### Slime Form
 
-Death is no longer the end. Upon dying, you will be split into smaller slime fragments and they will be tasked to avenge you.
-If they successfully slaughtered the target? you get to reform back. If they didn't? well back to spawnpoint you go with no inventory.
+- Activate and deactivate SlimeForm with `/slime` and `/slime off`.
+- Slime size controls maximum health and can be recovered by eating slimeballs.
+- SlimeForm players use slime movement, landing, hurt, and death sounds with slime particles.
+- Damage is modified by type: projectile damage is reduced by 50%, fall damage by 80%, explosion damage by 25%, and fire/lava damage is increased by 25%.
 
-Preview
+### Split and Reform
+
+When a SlimeForm player dies, they split into smaller slime fragments. If the fragments survive and defeat the responsible target, the player reforms at the surviving slime's location. Otherwise, the player respawns at their spawn point and loses their inventory.
+
 ![Respawn and reform preview](docs/video/respawn.gif)
 
 [Open the full-resolution WebM preview](docs/video/respawn.webm)
 
-
----
-
-### Slime Size System
-
-Your body follows Minecraft slime rules.
-
-- Maximum size: 5
-- Larger sizes provide more health.
-- Dying reduces your slime size.
-- Size determines how many fragments appear after death.
-- Size 1 is your final survival state.
-
-Slimeballs can be consumed to recover lost size.
-
----
-
 ### Sleeping Transformation
 
-be a blob when u sleep~
+Sleeping players are represented by a slime while SlimeForm is active.
 
-Preview
 ![Sleeping transformation preview](docs/video/sleeping.gif)
 
 [Open the full-resolution WebM preview](docs/video/sleeping.webm)
 
----
+### Dormant and Passive Slime Behavior
 
-### AFK State (toggleable)
+Inactive SlimeForm players can enter a protected dormant state. SlimeForm can also attract nearby passive slimes when enabled.
 
-wander around the world while you are afk
-(don't worry u cant be interacted during this state)
+## Configuration
 
----
+The Mod Menu configuration screen supports:
 
-### Configuration
-
-Fractured allows you to configure the gameplay however you like such as:
 - Maximum slime size.
+- Slimeballs required for size recovery.
 - Split recovery duration.
-- Slimeball requirement for size recovery.
-- AFK timer.
-- Optional slime behavior settings.
-
-i may add more config in the future but regardless this is what i achieved so far lol
+- Passive slime spawning and spawn limits.
+- AFK dormant behavior and inactivity duration.
+- Advanced rider positioning offsets.
+- Slime water behavior.
 
 ## License
 
-This template is available under the CC0 license. Feel free to learn from it and incorporate it in your own projects.
-
-### Disclaimer
-The mod is still far from perfect, so bugs may be expected. The use of AI may be involved in this project.
+Fractured is released under the CC0 1.0 Universal license. See [LICENSE](LICENSE) for the full text.

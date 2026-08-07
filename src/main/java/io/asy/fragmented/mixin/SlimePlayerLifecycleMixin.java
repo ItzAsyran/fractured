@@ -79,12 +79,13 @@ public abstract class SlimePlayerLifecycleMixin {
         int splitCount = currentSize == 2 ? 4 : 2;
         SlimeFormState.setSize(player, nextSize);
 
-        List<Slime> splitSlimes = spawnSplitSlimes(player, nextSize, splitCount);
+        String recoveryLineage = SlimeFormMod.createRecoveryLineageId(player);
+        List<Slime> splitSlimes = spawnSplitSlimes(player, nextSize, splitCount, recoveryLineage);
         if (!splitSlimes.isEmpty()) {
             SlimeFormMod.playSlimePlayerEffect(player, 28, 0.75F);
             SlimeFormMod.beginRecovery(player, splitSlimes, previousGameMode, originalKiller);
             player.setGameMode(GameType.SPECTATOR);
-            player.setCamera(splitSlimes.get(0));
+            SlimeFormMod.syncRecoveryCamera(player, splitSlimes.get(0));
             player.connection.send(new ClientboundGameEventPacket(
                     ClientboundGameEventPacket.IMMEDIATE_RESPAWN, 1.0F));
             player.displayClientMessage(
@@ -114,7 +115,8 @@ public abstract class SlimePlayerLifecycleMixin {
     }
 
     @Unique
-    private static List<Slime> spawnSplitSlimes(ServerPlayer player, int size, int count) {
+    private static List<Slime> spawnSplitSlimes(
+            ServerPlayer player, int size, int count, String recoveryLineage) {
         ServerLevel level = player.level();
         List<Slime> splitSlimes = new java.util.ArrayList<>();
         for (int index = 0; index < count; index++) {
@@ -124,7 +126,7 @@ public abstract class SlimePlayerLifecycleMixin {
             }
             double angle = (Math.PI * 2.0D * index) / count;
             slime.setSize(size, true);
-            slime.addTag(SlimeFormMod.recoveryLineageTag(player.getUUID()));
+            SlimeFormMod.assignRecoveryLineage(slime, recoveryLineage, null, 1);
             slime.setPos(
                     player.getX() + Math.cos(angle) * 0.75D,
                     player.getY() + 0.1D,

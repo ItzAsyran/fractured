@@ -3,13 +3,13 @@
 	"id": "slimeform",
 	"version": "${version}",
 	"name": "Fractured",
-	"description": "lorem ipsum, duh..",
+	"description": "Become a half-slime player with size growth, slime recovery, dormant behavior, and slime-based abilities.",
 	"authors": [
 		"asy_cherry"
 	],
 	"contact": {
-		"homepage": "https://fabricmc.net/",
-		"sources": "https://github.com/FabricMC/fabric-example-mod"
+		"homepage": "https://github.com/ItzAsyran/fractured",
+		"sources": "https://github.com/ItzAsyran/fractured"
 	},
 	"license": "CC0-1.0",
 	"icon": "icon.png",
