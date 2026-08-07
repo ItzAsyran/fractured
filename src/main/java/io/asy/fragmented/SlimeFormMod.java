@@ -941,6 +941,7 @@ public class SlimeFormMod implements ModInitializer {
         Recovery recovery = RECOVERIES.get(player.getUUID());
         if (recovery != null) {
             splitSlimes.forEach(slime -> recovery.lineageEntityIds().add(slime.getUUID()));
+            commandRecoverySlimesToAttackRecordedKiller(player.level().getServer(), recovery, splitSlimes);
         }
         LOGGER.info("[slimeform] Recovery started for {} ({} ticks) at {} ({}, {}, {})",
                 player.getName().getString(),
@@ -984,7 +985,7 @@ public class SlimeFormMod implements ModInitializer {
             }
             recovery.resetEmptyLineageChecks();
             continueRecoveryDefense(server, recovery, survivingSlimes);
-            coordinateRecoveryAssistance(recovery, survivingSlimes);
+            coordinateRecoveryAssistance(server, recovery, survivingSlimes);
             updateRecoveryFleeDangerBar(recovery, player, survivingSlimes);
             if (recovery.cameraResyncTicksRemaining > 0) {
                 syncRecoveryCamera(player, survivingSlimes.get(0));
@@ -1339,18 +1340,57 @@ public class SlimeFormMod implements ModInitializer {
             return;
         }
 
-        ServerLevel level = server.getLevel(recovery.dimension());
-        if (level == null) {
-            return;
-        }
-
-        Entity originalKiller = level.getEntity(originalKillerId);
-        if (originalKiller instanceof LivingEntity living && living.isAlive()) {
+        LivingEntity originalKiller = findValidRecordedKiller(server, recovery);
+        if (originalKiller != null) {
+            commandRecoverySlimesToAttackTarget(survivingSlimes, originalKiller);
             return;
         }
 
         recovery.setPostAvenging();
         commandRecoverySlimesToAttackHostiles(survivingSlimes);
+    }
+
+    private static void commandRecoverySlimesToAttackRecordedKiller(
+            MinecraftServer server,
+            Recovery recovery,
+            List<Slime> survivingSlimes) {
+        LivingEntity recordedKiller = findValidRecordedKiller(server, recovery);
+        if (recordedKiller != null) {
+            commandRecoverySlimesToAttackTarget(survivingSlimes, recordedKiller);
+        }
+    }
+
+    private static LivingEntity findValidRecordedKiller(
+            MinecraftServer server,
+            Recovery recovery) {
+        UUID originalKillerId = recovery.originalKillerId();
+        if (originalKillerId == null) {
+            return null;
+        }
+
+        ServerLevel level = server.getLevel(recovery.dimension());
+        if (level == null) {
+            return null;
+        }
+
+        Entity originalKiller = level.getEntity(originalKillerId);
+        if (!(originalKiller instanceof LivingEntity living)
+                || !living.isAlive()
+                || living.isRemoved()
+                || (living instanceof ServerPlayer player && player.isSpectator())) {
+            return null;
+        }
+        return living;
+    }
+
+    private static void commandRecoverySlimesToAttackTarget(
+            List<Slime> survivingSlimes,
+            LivingEntity target) {
+        for (Slime slime : survivingSlimes) {
+            if (slime.getSize() > SlimeFormState.MIN_SIZE) {
+                slime.setTarget(target);
+            }
+        }
     }
 
     private static void commandRecoverySlimesToAttackHostiles(List<Slime> survivingSlimes) {
@@ -1393,9 +1433,15 @@ public class SlimeFormMod implements ModInitializer {
     }
 
     private static void coordinateRecoveryAssistance(
+            MinecraftServer server,
             Recovery recovery,
             List<Slime> survivingSlimes) {
-        LivingEntity sharedTarget = findRecoveryHostileTarget(survivingSlimes);
+        LivingEntity sharedTarget = recovery.postAvenging()
+                ? null
+                : findValidRecordedKiller(server, recovery);
+        if (sharedTarget == null) {
+            sharedTarget = findRecoveryHostileTarget(survivingSlimes);
+        }
         if (sharedTarget != null) {
             for (Slime slime : survivingSlimes) {
                 if (slime.getSize() > SlimeFormState.MIN_SIZE) {
