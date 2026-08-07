@@ -1,6 +1,7 @@
 package io.asy.fragmented.mixin;
 
 import io.asy.fragmented.SlimeFormMod;
+import io.asy.fragmented.SlimeFormVisuals;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.monster.Slime;
@@ -22,9 +23,7 @@ public abstract class SlimeMobTargetMixin {
     private void slimeform$rejectSlimeFormPlayer(LivingEntity target, CallbackInfo ci) {
         if ((Object) this instanceof Mob mob
                 && target instanceof Player player
-                && (player.getTags().contains(SlimeFormMod.SLIME_DORMANT_TAG)
-                || (mob instanceof Slime
-                && player.getTags().contains(SlimeFormMod.SLIME_FORM_TAG)))) {
+                && slimeform$protectsTarget(mob, player)) {
             if (!player.getUUID().equals(slimeform$lastRejectedTarget)) {
                 slimeform$lastRejectedTarget = player.getUUID();
                 SlimeFormMod.LOGGER.warn(
@@ -36,13 +35,19 @@ public abstract class SlimeMobTargetMixin {
         }
     }
 
+    @Unique
+    private static boolean slimeform$protectsTarget(Mob mob, Player player) {
+        return player.getTags().contains(SlimeFormMod.SLIME_DORMANT_TAG)
+                || (mob instanceof Slime slime
+                && (SlimeFormVisuals.isDormantVisualSlime(slime)
+                || player.getTags().contains(SlimeFormMod.SLIME_FORM_TAG)));
+    }
+
     @Inject(method = "tick", at = @At("HEAD"))
     private void slimeform$clearExistingSlimeFormPlayerTarget(CallbackInfo ci) {
         Mob mob = (Mob) (Object) this;
         if (mob.getTarget() instanceof Player player
-                && (player.getTags().contains(SlimeFormMod.SLIME_DORMANT_TAG)
-                || (mob instanceof Slime
-                && player.getTags().contains(SlimeFormMod.SLIME_FORM_TAG)))) {
+                && slimeform$protectsTarget(mob, player)) {
             if (!player.getUUID().equals(slimeform$lastRejectedTarget)) {
                 slimeform$lastRejectedTarget = player.getUUID();
                 SlimeFormMod.LOGGER.warn(

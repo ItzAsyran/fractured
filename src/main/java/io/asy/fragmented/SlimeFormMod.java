@@ -831,6 +831,22 @@ public class SlimeFormMod implements ModInitializer {
         return getRecoveryLineage(slime) != null;
     }
 
+    public static void recordRecoveryAttacker(Slime slime, LivingEntity attacker) {
+        if (slime.level().isClientSide()
+                || attacker == slime
+                || !attacker.isAlive()
+                || attacker.isRemoved()) {
+            return;
+        }
+
+        Recovery recovery = findRecovery(slime);
+        if (recovery == null) {
+            return;
+        }
+
+        recovery.setRecentAttacker(attacker.getUUID());
+    }
+
     public static String getRecoveryLineage(Slime slime) {
         return ((SlimeRecoveryLineage) slime).slimeform$getRecoveryLineage();
     }
@@ -1374,13 +1390,52 @@ public class SlimeFormMod implements ModInitializer {
         }
 
         Entity originalKiller = level.getEntity(originalKillerId);
-        if (!(originalKiller instanceof LivingEntity living)
-                || !living.isAlive()
-                || living.isRemoved()
-                || (living instanceof ServerPlayer player && player.isSpectator())) {
+        if (!isValidRecoveryTarget(originalKiller)) {
             return null;
         }
-        return living;
+        return (LivingEntity) originalKiller;
+    }
+
+    private static LivingEntity findRecentRecoveryAttacker(
+            MinecraftServer server,
+            Recovery recovery) {
+        UUID attackerId = recovery.recentAttackerId();
+        if (attackerId == null) {
+            return null;
+        }
+
+        ServerLevel level = server.getLevel(recovery.dimension());
+        if (level == null) {
+            recovery.clearRecentAttacker();
+            return null;
+        }
+
+        Entity attacker = level.getEntity(attackerId);
+        if (!isValidRecoveryTarget(attacker)) {
+            recovery.clearRecentAttacker();
+            return null;
+        }
+        return (LivingEntity) attacker;
+    }
+
+    private static LivingEntity findRecoveryRetaliationTarget(
+            MinecraftServer server,
+            Recovery recovery) {
+        LivingEntity recentAttacker = findRecentRecoveryAttacker(server, recovery);
+        if (recentAttacker != null) {
+            return recentAttacker;
+        }
+        if (!recovery.postAvenging()) {
+            return findValidRecordedKiller(server, recovery);
+        }
+        return null;
+    }
+
+    private static boolean isValidRecoveryTarget(Entity entity) {
+        return entity instanceof LivingEntity living
+                && living.isAlive()
+                && !living.isRemoved()
+                && (!(living instanceof ServerPlayer player) || !player.isSpectator());
     }
 
     private static void commandRecoverySlimesToAttackTarget(
@@ -1436,9 +1491,7 @@ public class SlimeFormMod implements ModInitializer {
             MinecraftServer server,
             Recovery recovery,
             List<Slime> survivingSlimes) {
-        LivingEntity sharedTarget = recovery.postAvenging()
-                ? null
-                : findValidRecordedKiller(server, recovery);
+        LivingEntity sharedTarget = findRecoveryRetaliationTarget(server, recovery);
         if (sharedTarget == null) {
             sharedTarget = findRecoveryHostileTarget(survivingSlimes);
         }
@@ -2251,6 +2304,7 @@ public class SlimeFormMod implements ModInitializer {
         private final InventorySnapshot inventory;
         private Vec3 lastKnownPosition;
         private boolean postAvenging;
+        private UUID recentAttackerId;
         private final Set<UUID> assistedSlimeIds = new HashSet<>();
         private final Set<UUID> lineageEntityIds = new HashSet<>();
         private List<BlockPos> sharedFleeRoute = List.of();
@@ -2305,6 +2359,18 @@ public class SlimeFormMod implements ModInitializer {
 
         private void setPostAvenging() {
             postAvenging = true;
+        }
+
+        private UUID recentAttackerId() {
+            return recentAttackerId;
+        }
+
+        private void setRecentAttacker(UUID attackerId) {
+            this.recentAttackerId = attackerId;
+        }
+
+        private void clearRecentAttacker() {
+            recentAttackerId = null;
         }
 
         private Set<UUID> assistedSlimeIds() {

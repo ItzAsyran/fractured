@@ -309,6 +309,11 @@ public final class SlimeFormVisuals {
         }
     }
 
+    public static boolean isDormantVisualSlime(Slime slime) {
+        return slime.getTags().stream().anyMatch(
+                tag -> tag.startsWith(VISUAL_PREFIX) && tag.endsWith(DORMANT_SUFFIX));
+    }
+
     public static void queueDormantRemoval(ServerPlayer player) {
         PENDING_DORMANT_REMOVALS.put(player.getUUID(), player);
     }

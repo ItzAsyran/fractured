@@ -9,6 +9,7 @@ import net.minecraft.tags.DamageTypeTags;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.damagesource.DamageTypes;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.monster.Slime;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.state.BlockState;
@@ -30,6 +31,19 @@ public abstract class SlimeFormPlayerMixin {
         if ((Object) this instanceof Player player && SlimeFormMod.isDormant(player)) {
             cir.setReturnValue(false);
         }
+    }
+
+    @Inject(method = "hurtServer", at = @At("TAIL"))
+    private void slimeform$recordRecoveryAttacker(
+            ServerLevel level, DamageSource source, float amount,
+            CallbackInfoReturnable<Boolean> cir) {
+        if (!cir.getReturnValue()
+                || !((Object) this instanceof Slime slime)
+                || !(source.getEntity() instanceof LivingEntity attacker)) {
+            return;
+        }
+
+        SlimeFormMod.recordRecoveryAttacker(slime, attacker);
     }
 
     @ModifyArgs(

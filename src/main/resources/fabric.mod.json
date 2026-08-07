@@ -1,9 +1,9 @@
 {
 	"schemaVersion": 1,
-	"id": "slimeform",
+	"id": "fragmented",
 	"version": "${version}",
 	"name": "Fractured",
-	"description": "Become a half-slime player with size growth, slime recovery, dormant behavior, and slime-based abilities.",
+	"description": "squish O.O",
 	"authors": [
 		"asy_cherry"
 	],
