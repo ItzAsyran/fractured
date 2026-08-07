@@ -6,6 +6,7 @@ import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.minecraft.client.Minecraft;
 
 public final class SlimeFormClient implements ClientModInitializer {
+    private boolean companionSent;
     private boolean wakeSent;
 
     @Override
@@ -14,6 +15,14 @@ public final class SlimeFormClient implements ClientModInitializer {
     }
 
     private void tick(Minecraft client) {
+        if (client.player == null) {
+            companionSent = false;
+        } else if (!companionSent
+                && ClientPlayNetworking.canSend(SlimeFormPayloads.CLIENT_COMPANION_TYPE)) {
+            ClientPlayNetworking.send(new SlimeFormPayloads.ClientCompanionPayload());
+            companionSent = true;
+        }
+
         if (client.player == null || !SlimeFormMod.isDormant(client.player)) {
             wakeSent = false;
             return;

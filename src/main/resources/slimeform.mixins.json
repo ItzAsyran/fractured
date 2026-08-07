@@ -28,7 +28,6 @@
 	],
 	"server": [],
 	"client": [
-		"SlimeRecoveryDebugRendererMixin",
 		"SlimeDeathScreenMixin",
 		"SlimeClientRecoveryMixin",
 		"SlimeSleepingPlayerRendererMixin",

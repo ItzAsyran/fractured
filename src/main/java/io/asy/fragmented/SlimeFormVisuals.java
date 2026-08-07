@@ -35,6 +35,7 @@ public final class SlimeFormVisuals {
     private static final String DORMANT_SUFFIX = ".dormant";
     private static final Map<UUID, UUID> DORMANT_SLIMES = new HashMap<>();
     private static final Map<UUID, ItemDisplaySession> ITEM_DISPLAY_SESSIONS = new HashMap<>();
+    private static final Map<UUID, HiddenInventorySession> HIDDEN_INVENTORIES = new HashMap<>();
     private static final Map<UUID, ServerPlayer> PENDING_DORMANT_REMOVALS = new HashMap<>();
     private static final Map<UUID, Long> AMBIENT_PARTICLE_TICKS = new HashMap<>();
     private static final double ITEM_DEBUG_AXIS_MARKER_DISTANCE = 0.55D;
@@ -85,6 +86,21 @@ public final class SlimeFormVisuals {
         }
     }
 
+    private static final class HiddenInventorySession {
+        private final List<ItemStack> inventory;
+        private final Map<EquipmentSlot, ItemStack> equipment;
+        private final ItemStack carried;
+
+        private HiddenInventorySession(
+                List<ItemStack> inventory,
+                Map<EquipmentSlot, ItemStack> equipment,
+                ItemStack carried) {
+            this.inventory = inventory;
+            this.equipment = equipment;
+            this.carried = carried;
+        }
+    }
+
     private SlimeFormVisuals() {
     }
 
@@ -97,6 +113,12 @@ public final class SlimeFormVisuals {
             AMBIENT_PARTICLE_TICKS.remove(player.getUUID());
         }
         if (sleeping || dormant) {
+            boolean hideInventory = dormant || sleeping;
+            if (hideInventory) {
+                hideInventory(player);
+            } else {
+                restoreHiddenInventory(player);
+            }
             VisualMode mode = dormant ? VisualMode.DORMANT : VisualMode.SLEEPING;
             String tag = visualTag(player, dormant);
             ServerLevel level = player.level();
@@ -140,6 +162,7 @@ public final class SlimeFormVisuals {
                 }
             }
         } else {
+            restoreHiddenInventory(player);
             remove(player, false);
             remove(player, true);
         }
@@ -205,6 +228,68 @@ public final class SlimeFormVisuals {
             DORMANT_SLIMES.remove(player.getUUID());
         }
         AMBIENT_PARTICLE_TICKS.remove(player.getUUID());
+    }
+
+    /** Restores a temporary hidden-mode inventory, if one is active. */
+    public static void restoreHiddenInventory(ServerPlayer player) {
+        HiddenInventorySession session = HIDDEN_INVENTORIES.remove(player.getUUID());
+        if (session == null) {
+            return;
+        }
+
+        List<ItemStack> inventory = player.getInventory().getNonEquipmentItems();
+        for (int index = 0; index < inventory.size() && index < session.inventory.size(); index++) {
+            inventory.set(index, session.inventory.get(index).copy());
+        }
+        for (EquipmentSlot slot : carriedEquipmentSlots()) {
+            player.setItemSlot(slot, session.equipment.getOrDefault(slot, ItemStack.EMPTY).copy());
+        }
+        player.containerMenu.setCarried(session.carried.copy());
+        player.getInventory().setChanged();
+        player.inventoryMenu.broadcastChanges();
+        player.containerMenu.broadcastChanges();
+    }
+
+    /** Restores all active hidden-mode inventories before an orderly server shutdown. */
+    public static void restoreAllHiddenInventories(MinecraftServer server) {
+        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+            restoreHiddenInventory(player);
+        }
+    }
+
+    private static void hideInventory(ServerPlayer player) {
+        if (HIDDEN_INVENTORIES.containsKey(player.getUUID())) {
+            return;
+        }
+
+        List<ItemStack> inventory = new java.util.ArrayList<>();
+        for (ItemStack stack : player.getInventory().getNonEquipmentItems()) {
+            inventory.add(stack.copy());
+        }
+        Map<EquipmentSlot, ItemStack> equipment = new EnumMap<>(EquipmentSlot.class);
+        for (EquipmentSlot slot : carriedEquipmentSlots()) {
+            equipment.put(slot, player.getItemBySlot(slot).copy());
+        }
+        ItemStack carried = player.containerMenu.getCarried().copy();
+        HIDDEN_INVENTORIES.put(player.getUUID(), new HiddenInventorySession(inventory, equipment, carried));
+
+        player.getInventory().getNonEquipmentItems().replaceAll(ignored -> ItemStack.EMPTY);
+        for (EquipmentSlot slot : carriedEquipmentSlots()) {
+            player.setItemSlot(slot, ItemStack.EMPTY);
+        }
+        player.containerMenu.setCarried(ItemStack.EMPTY);
+        player.getInventory().setChanged();
+        player.inventoryMenu.broadcastChanges();
+        player.containerMenu.broadcastChanges();
+    }
+
+    private static Set<EquipmentSlot> carriedEquipmentSlots() {
+        return java.util.EnumSet.of(
+                EquipmentSlot.HEAD,
+                EquipmentSlot.CHEST,
+                EquipmentSlot.LEGS,
+                EquipmentSlot.FEET,
+                EquipmentSlot.OFFHAND);
     }
 
     public static void refreshItemDisplays(ServerPlayer player) {
@@ -614,6 +699,17 @@ public final class SlimeFormVisuals {
     }
 
     private static ItemStack itemFor(ServerPlayer player, DisplaySlot slot) {
+        HiddenInventorySession hidden = HIDDEN_INVENTORIES.get(player.getUUID());
+        if (hidden != null) {
+            return switch (slot) {
+                case MAINHAND -> selectedMainHandItem(player, hidden);
+                case OFFHAND -> hidden.equipment.getOrDefault(EquipmentSlot.OFFHAND, ItemStack.EMPTY);
+                case HEAD -> hidden.equipment.getOrDefault(EquipmentSlot.HEAD, ItemStack.EMPTY);
+                case CHEST -> hidden.equipment.getOrDefault(EquipmentSlot.CHEST, ItemStack.EMPTY);
+                case LEGS -> hidden.equipment.getOrDefault(EquipmentSlot.LEGS, ItemStack.EMPTY);
+                case FEET -> hidden.equipment.getOrDefault(EquipmentSlot.FEET, ItemStack.EMPTY);
+            };
+        }
         return switch (slot) {
             case MAINHAND -> player.getMainHandItem();
             case OFFHAND -> player.getOffhandItem();
@@ -622,6 +718,13 @@ public final class SlimeFormVisuals {
             case LEGS -> player.getItemBySlot(EquipmentSlot.LEGS);
             case FEET -> player.getItemBySlot(EquipmentSlot.FEET);
         };
+    }
+
+    private static ItemStack selectedMainHandItem(ServerPlayer player, HiddenInventorySession hidden) {
+        int selected = player.getInventory().getSelectedSlot();
+        return selected >= 0 && selected < hidden.inventory.size()
+                ? hidden.inventory.get(selected)
+                : ItemStack.EMPTY;
     }
 
     private static String visualTag(ServerPlayer player, boolean dormant) {

@@ -1,11 +1,13 @@
 package io.asy.fragmented;
 
 import com.mojang.brigadier.Command;
+import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.arguments.DoubleArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import me.shedaniel.autoconfig.AutoConfig;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
@@ -61,6 +63,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.ToIntFunction;
 
 public class SlimeFormMod implements ModInitializer {
     public static final String MOD_ID = "slimeform";
@@ -88,12 +91,14 @@ public class SlimeFormMod implements ModInitializer {
     private static final Map<CalibrationOrientation, CalibrationBounds> CALIBRATED_ZONES =
             new EnumMap<>(CalibrationOrientation.class);
     static final double RECOVERY_FLEE_THREAT_RADIUS = 32.0D;
+    private static final long RECOVERY_ACTIVE_DAMAGE_SOURCE_TICKS = 40L;
     private static final int RECOVERY_FLEE_DIRECTION_COUNT = 8;
     private static final double[] RECOVERY_FLEE_WAYPOINT_DISTANCES = {8.0D, 12.0D, 16.0D};
     public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
     private static final Map<UUID, Recovery> RECOVERIES = new HashMap<>();
     private static final Map<UUID, Long> PASSIVE_SPAWN_NEXT_ATTEMPT = new HashMap<>();
     private static final String PASSIVE_SLIME_TAG = "slimeform.passive_spawn";
+    private static final String RECOVERY_DEBUG_NAME_TAG = "slimeform.recovery_debug_name";
     private static final double PASSIVE_SPAWN_MIN_DISTANCE = 8.0D;
     private static final double PASSIVE_SPAWN_MAX_DISTANCE = 24.0D;
     private static final int PASSIVE_SPAWN_LIGHT_THRESHOLD = 7;
@@ -188,8 +193,14 @@ public class SlimeFormMod implements ModInitializer {
     public void onInitialize() {
         SlimeFormConfig.initialize();
         PayloadTypeRegistry.playC2S().register(
+                SlimeFormPayloads.CLIENT_COMPANION_TYPE,
+                SlimeFormPayloads.CLIENT_COMPANION_CODEC);
+        PayloadTypeRegistry.playC2S().register(
                 SlimeFormPayloads.WAKE_DORMANT_TYPE,
                 SlimeFormPayloads.WAKE_DORMANT_CODEC);
+        ServerPlayNetworking.registerGlobalReceiver(
+                SlimeFormPayloads.CLIENT_COMPANION_TYPE,
+                (payload, context) -> CLIENT_COMPANION_PLAYERS.add(context.player().getUUID()));
         ServerPlayNetworking.registerGlobalReceiver(
                 SlimeFormPayloads.WAKE_DORMANT_TYPE,
                 (payload, context) -> wakeDormant(context.player()));
@@ -197,12 +208,15 @@ public class SlimeFormMod implements ModInitializer {
 
         ServerTickEvents.END_SERVER_TICK.register(server -> {
             tickRecoveries(server);
+            tickRecoveryDebugNames(server);
             tickPassiveSlimeSpawning(server);
             tickDormantPlayers(server);
             SlimeFormVisuals.processPendingRemovals(server);
         });
+        ServerLifecycleEvents.SERVER_STOPPING.register(SlimeFormVisuals::restoreAllHiddenInventories);
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
             ServerPlayer player = handler.getPlayer();
+            CLIENT_COMPANION_PLAYERS.remove(player.getUUID());
             SlimeFormState.applyHealth(player, false);
             ACTIVITY_TICKS.put(player.getUUID(), player.level().getGameTime());
             ACTIVITY_POSITIONS.put(player.getUUID(), player.position());
@@ -217,68 +231,93 @@ public class SlimeFormMod implements ModInitializer {
             ServerPlayer player = handler.getPlayer();
             clearCalibrationFor(player);
             wakeDormant(player);
+            restoreSleepingVisibility(player);
+            SlimeFormVisuals.restoreHiddenInventory(player);
             SlimeFormVisuals.remove(player, false);
             SlimeFormVisuals.queueDormantRemoval(player);
             ACTIVITY_TICKS.remove(player.getUUID());
             COMBAT_TICKS.remove(player.getUUID());
             ACTIVITY_POSITIONS.remove(player.getUUID());
+            CLIENT_COMPANION_PLAYERS.remove(player.getUUID());
         });
 
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) ->
                 dispatcher.register(Commands.literal("slime")
-                        .executes(context -> activateSlimeForm(context.getSource().getPlayerOrException()))
+                        .executes(context -> executeClientCommand(context, SlimeFormMod::activateSlimeForm))
                         .then(Commands.literal("status")
-                                .executes(context -> showSlimeStatus(context.getSource().getPlayerOrException())))
+                                .executes(context -> executeClientCommand(context, SlimeFormMod::showSlimeStatus)))
                         .then(Commands.literal("off")
-                                .executes(context -> deactivateSlimeForm(context.getSource().getPlayerOrException())))
+                                .executes(context -> executeClientCommand(context, SlimeFormMod::deactivateSlimeForm)))
                         .then(Commands.literal("calibrate")
                                 .then(Commands.literal("westeast")
-                                        .executes(context -> beginCalibration(
-                                                context.getSource().getPlayerOrException(),
-                                                CalibrationOrientation.WEST_EAST)))
+                                        .executes(context -> executeClientCommand(context,
+                                                player -> beginCalibration(player, CalibrationOrientation.WEST_EAST))))
                                 .then(Commands.literal("northsouth")
-                                        .executes(context -> beginCalibration(
-                                                context.getSource().getPlayerOrException(),
-                                                CalibrationOrientation.NORTH_SOUTH)))
+                                        .executes(context -> executeClientCommand(context,
+                                                player -> beginCalibration(player, CalibrationOrientation.NORTH_SOUTH))))
                                 .then(Commands.literal("done")
-                                        .executes(context -> finishCalibrationCorner(
-                                                context.getSource().getPlayerOrException())))
+                                        .executes(context -> executeClientCommand(context,
+                                                SlimeFormMod::finishCalibrationCorner)))
                                 .then(Commands.literal("cancel")
-                                        .executes(context -> cancelCalibration(
-                                                context.getSource().getPlayerOrException())))
+                                        .executes(context -> executeClientCommand(context,
+                                                SlimeFormMod::cancelCalibration)))
                                 .then(Commands.literal("status")
-                                        .executes(context -> showCalibrationStatus(
-                                                context.getSource().getPlayerOrException()))))
+                                        .executes(context -> executeClientCommand(context,
+                                                SlimeFormMod::showCalibrationStatus))))
                         .then(Commands.literal("itemdebug")
                                 .then(itemDebugHandCommands("mainhand"))
                                 .then(itemDebugHandCommands("offhand"))
                                 .then(Commands.literal("size")
                                         .then(Commands.argument("value", DoubleArgumentType.doubleArg(0.01D, 4.0D))
-                                                .executes(context -> setItemDebugScale(
-                                                        context.getSource().getPlayerOrException(),
-                                                        DoubleArgumentType.getDouble(context, "value")))))
+                                                .executes(context -> executeClientCommand(context,
+                                                        player -> setItemDebugScale(player,
+                                                                DoubleArgumentType.getDouble(context, "value"))))))
                                 .then(Commands.literal("axes")
-                                        .executes(context -> toggleItemDebugAxes(
-                                                context.getSource().getPlayerOrException())))
+                                        .executes(context -> executeClientCommand(context,
+                                                SlimeFormMod::toggleItemDebugAxes)))
                                 .then(Commands.literal("rotation")
                                         .then(Commands.literal("x")
                                                 .then(Commands.argument("value", DoubleArgumentType.doubleArg())
-                                                        .executes(context -> setItemDebugRotation(
-                                                                context.getSource().getPlayerOrException(),
+                                                        .executes(context -> executeClientCommand(context,
+                                                                player -> setItemDebugRotation(player,
                                                                 'x',
-                                                                DoubleArgumentType.getDouble(context, "value")))))
+                                                                DoubleArgumentType.getDouble(context, "value"))))))
                                         .then(Commands.literal("y")
                                                 .then(Commands.argument("value", DoubleArgumentType.doubleArg())
-                                                        .executes(context -> setItemDebugRotation(
-                                                                context.getSource().getPlayerOrException(),
+                                                        .executes(context -> executeClientCommand(context,
+                                                                player -> setItemDebugRotation(player,
                                                                 'y',
-                                                                DoubleArgumentType.getDouble(context, "value")))))
+                                                                DoubleArgumentType.getDouble(context, "value"))))))
                                         .then(Commands.literal("z")
                                                 .then(Commands.argument("value", DoubleArgumentType.doubleArg())
-                                                        .executes(context -> setItemDebugRotation(
-                                                                context.getSource().getPlayerOrException(),
+                                                        .executes(context -> executeClientCommand(context,
+                                                                player -> setItemDebugRotation(player,
                                                                 'z',
-                                                                DoubleArgumentType.getDouble(context, "value")))))))));
+                                                                DoubleArgumentType.getDouble(context, "value"))))))))));
+    }
+
+    private static int executeClientCommand(
+            CommandContext<CommandSourceStack> context,
+            ToIntFunction<ServerPlayer> command) {
+        ServerPlayer player = context.getSource().getEntity() instanceof ServerPlayer serverPlayer
+                ? serverPlayer
+                : null;
+        if (player == null) {
+            context.getSource().sendFailure(Component.literal(
+                    "This command requires the Fractured client companion."));
+            return 0;
+        }
+        if (!hasClientCompanion(player)) {
+            player.sendSystemMessage(Component.literal(
+                    "The Fractured client companion is required to use /slime.")
+                    .withStyle(ChatFormatting.RED));
+            return 0;
+        }
+        return command.applyAsInt(player);
+    }
+
+    public static boolean hasClientCompanion(ServerPlayer player) {
+        return CLIENT_COMPANION_PLAYERS.contains(player.getUUID());
     }
 
     private static int beginCalibration(ServerPlayer player, CalibrationOrientation orientation) {
@@ -463,25 +502,19 @@ public class SlimeFormMod implements ModInitializer {
         return Commands.literal(hand)
                 .then(Commands.literal("x")
                         .then(Commands.argument("value", DoubleArgumentType.doubleArg())
-                                .executes(context -> setItemDebugOffset(
-                                        context.getSource().getPlayerOrException(),
-                                        hand,
-                                        'x',
-                                        DoubleArgumentType.getDouble(context, "value")))))
+                                .executes(context -> executeClientCommand(context,
+                                        player -> setItemDebugOffset(player, hand, 'x',
+                                                DoubleArgumentType.getDouble(context, "value"))))))
                 .then(Commands.literal("y")
                         .then(Commands.argument("value", DoubleArgumentType.doubleArg())
-                                .executes(context -> setItemDebugOffset(
-                                        context.getSource().getPlayerOrException(),
-                                        hand,
-                                        'y',
-                                        DoubleArgumentType.getDouble(context, "value")))))
+                                .executes(context -> executeClientCommand(context,
+                                        player -> setItemDebugOffset(player, hand, 'y',
+                                                DoubleArgumentType.getDouble(context, "value"))))))
                 .then(Commands.literal("z")
                         .then(Commands.argument("value", DoubleArgumentType.doubleArg())
-                                .executes(context -> setItemDebugOffset(
-                                        context.getSource().getPlayerOrException(),
-                                        hand,
-                                        'z',
-                                        DoubleArgumentType.getDouble(context, "value")))));
+                                .executes(context -> executeClientCommand(context,
+                                        player -> setItemDebugOffset(player, hand, 'z',
+                                                DoubleArgumentType.getDouble(context, "value"))))));
     }
 
     private static int setItemDebugOffset(ServerPlayer player, String hand, char axis, double value) {
@@ -607,6 +640,8 @@ public class SlimeFormMod implements ModInitializer {
     private static final Map<UUID, Long> COMBAT_TICKS = new HashMap<>();
     private static final Map<UUID, Vec3> ACTIVITY_POSITIONS = new HashMap<>();
     private static final Map<UUID, Boolean> DORMANT_PREVIOUS_INVISIBILITY = new HashMap<>();
+    private static final Map<UUID, Boolean> SLEEPING_PREVIOUS_INVISIBILITY = new HashMap<>();
+    private static final Set<UUID> CLIENT_COMPANION_PLAYERS = new HashSet<>();
 
     public static boolean isDormant(Player player) {
         return player.getTags().contains(SLIME_DORMANT_TAG);
@@ -634,6 +669,7 @@ public class SlimeFormMod implements ModInitializer {
         player.stopRiding();
         player.removeTag(SLIME_DORMANT_TAG);
         SlimeFormVisuals.queueDormantRemoval(player);
+        SlimeFormVisuals.restoreHiddenInventory(player);
         Boolean previousInvisibility = DORMANT_PREVIOUS_INVISIBILITY.remove(player.getUUID());
         player.setInvisible(previousInvisibility != null && previousInvisibility);
         player.displayClientMessage(Component.literal("Dormant mode ended.").withStyle(ChatFormatting.GREEN), true);
@@ -643,6 +679,7 @@ public class SlimeFormMod implements ModInitializer {
 
     private static void tickDormantPlayers(MinecraftServer server) {
         for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+            updateSleepingVisibility(player);
             if (!SlimeFormState.isActive(player)) {
                 wakeDormant(player);
                 SlimeFormVisuals.tick(player);
@@ -694,6 +731,24 @@ public class SlimeFormMod implements ModInitializer {
                 }
             }
             SlimeFormVisuals.tick(player);
+        }
+    }
+
+    private static void updateSleepingVisibility(ServerPlayer player) {
+        boolean shouldHide = SlimeFormState.isActive(player)
+                && player.isSleeping();
+        if (shouldHide) {
+            SLEEPING_PREVIOUS_INVISIBILITY.putIfAbsent(player.getUUID(), player.isInvisible());
+            player.setInvisible(true);
+        } else {
+            restoreSleepingVisibility(player);
+        }
+    }
+
+    private static void restoreSleepingVisibility(ServerPlayer player) {
+        Boolean previous = SLEEPING_PREVIOUS_INVISIBILITY.remove(player.getUUID());
+        if (previous != null) {
+            player.setInvisible(previous);
         }
     }
 
@@ -800,6 +855,27 @@ public class SlimeFormMod implements ModInitializer {
         }
         compactId = compactId.substring(0, Math.min(4, compactId.length())).toUpperCase(java.util.Locale.ROOT);
         return "Recovery " + compactId + " · G" + getRecoveryGeneration(slime);
+    }
+
+    private static void tickRecoveryDebugNames(MinecraftServer server) {
+        boolean debug = SlimeFormConfig.get().recoveryLineageDebug;
+        for (ServerLevel level : server.getAllLevels()) {
+            for (Entity entity : level.getAllEntities()) {
+                if (!(entity instanceof Slime slime) || !hasRecoveryLineage(slime)) {
+                    continue;
+                }
+
+                if (debug) {
+                    slime.addTag(RECOVERY_DEBUG_NAME_TAG);
+                    slime.setCustomName(Component.literal(getRecoveryDebugLabel(slime)));
+                    slime.setCustomNameVisible(true);
+                } else if (slime.getTags().contains(RECOVERY_DEBUG_NAME_TAG)) {
+                    slime.removeTag(RECOVERY_DEBUG_NAME_TAG);
+                    slime.setCustomName(null);
+                    slime.setCustomNameVisible(false);
+                }
+            }
+        }
     }
 
     public static void assignRecoveryLineage(
@@ -1034,10 +1110,7 @@ public class SlimeFormMod implements ModInitializer {
     }
 
     static boolean hasRecoveryFleeThreatNearby(Slime slime) {
-        return !slime.level().getEntitiesOfClass(
-                Mob.class,
-                slime.getBoundingBox().inflate(RECOVERY_FLEE_THREAT_RADIUS),
-                SlimeFormMod::isRecoveryHostile).isEmpty();
+        return !getRecoveryFleeThreats(slime).isEmpty();
     }
 
     private static void tickPassiveSlimeSpawning(MinecraftServer server) {
@@ -1083,7 +1156,7 @@ public class SlimeFormMod implements ModInitializer {
             if (slime.getSize() != SlimeFormState.MIN_SIZE) {
                 continue;
             }
-            for (Mob threat : getRecoveryFleeThreats(slime)) {
+            for (LivingEntity threat : getRecoveryFleeThreats(slime)) {
                 nearestDistance = Math.min(nearestDistance, slime.distanceTo(threat));
             }
         }
@@ -1397,9 +1470,9 @@ public class SlimeFormMod implements ModInitializer {
         }
     }
 
-    static Path findRecoveryFleePath(Slime slime, List<Mob> threats) {
+    static Path findRecoveryFleePath(Slime slime, List<LivingEntity> threats) {
         Vec3 away = Vec3.ZERO;
-        for (Mob threat : threats) {
+        for (LivingEntity threat : threats) {
             away = away.add(slime.position().subtract(threat.position()));
         }
         double baseAngle = away.horizontalDistanceSqr() < 0.0001D
@@ -1481,13 +1554,13 @@ public class SlimeFormMod implements ModInitializer {
         return bestSafePath != null ? bestSafePath : bestFallbackPath;
     }
 
-    static List<Mob> getRecoveryFleeThreats(Slime slime) {
+    static List<LivingEntity> getRecoveryFleeThreats(Slime slime) {
         Recovery recovery = findRecovery(slime);
         if (recovery == null) {
             return List.of();
         }
 
-        Map<UUID, Mob> threats = new HashMap<>();
+        Map<UUID, LivingEntity> threats = new HashMap<>();
         for (Slime fragment : getLineageSlimes((MinecraftServer) slime.level().getServer(), recovery.lineageId())
                 .stream()
                 .filter(fragment -> fragment.getSize() == SlimeFormState.MIN_SIZE)
@@ -1498,13 +1571,68 @@ public class SlimeFormMod implements ModInitializer {
                     SlimeFormMod::isRecoveryHostile)) {
                 threats.put(threat.getUUID(), threat);
             }
+
+            for (LivingEntity attacker : fragment.level().getEntitiesOfClass(
+                    LivingEntity.class,
+                    fragment.getBoundingBox().inflate(RECOVERY_FLEE_THREAT_RADIUS),
+                    entity -> entity.isAlive()
+                            && entity != fragment
+                            && entity instanceof Mob mob
+                            && mob.getTarget() == fragment)) {
+                threats.put(attacker.getUUID(), attacker);
+            }
+
+            addRecentDamageSources(fragment, threats);
+            UUID originalKillerId = recovery.originalKillerId();
+            if (originalKillerId != null) {
+                Entity originalKiller = fragment.level().getEntity(originalKillerId);
+                if (originalKiller instanceof LivingEntity killer
+                        && killer.isAlive()
+                        && fragment.distanceToSqr(killer)
+                                <= RECOVERY_FLEE_THREAT_RADIUS * RECOVERY_FLEE_THREAT_RADIUS) {
+                    threats.put(killer.getUUID(), killer);
+                }
+            }
         }
         return List.copyOf(threats.values());
     }
 
+    private static void addRecentDamageSources(
+            Slime fragment,
+            Map<UUID, LivingEntity> threats) {
+        long gameTime = fragment.level().getGameTime();
+        LivingEntity mobAttacker = fragment.getLastHurtByMob();
+        if (isRecentDamageSource(fragment, mobAttacker,
+                gameTime - fragment.getLastHurtByMobTimestamp())) {
+            threats.put(mobAttacker.getUUID(), mobAttacker);
+        }
+
+        Player playerAttacker = fragment.getLastHurtByPlayer();
+        if (playerAttacker != null
+                && playerAttacker.isAlive()
+                && fragment.getLastHurtByPlayerMemoryTime() > 0
+                && fragment.distanceToSqr(playerAttacker)
+                        <= RECOVERY_FLEE_THREAT_RADIUS * RECOVERY_FLEE_THREAT_RADIUS) {
+            threats.put(playerAttacker.getUUID(), playerAttacker);
+        }
+    }
+
+    private static boolean isRecentDamageSource(
+            Slime fragment,
+            LivingEntity source,
+            long ageOrMemoryTicks) {
+        return source != null
+                && source.isAlive()
+                && source != fragment
+                && ageOrMemoryTicks >= 0L
+                && ageOrMemoryTicks <= RECOVERY_ACTIVE_DAMAGE_SOURCE_TICKS
+                && fragment.distanceToSqr(source)
+                        <= RECOVERY_FLEE_THREAT_RADIUS * RECOVERY_FLEE_THREAT_RADIUS;
+    }
+
     static RecoveryFleePathResult getRecoveryFleePath(
             Slime slime,
-            List<Mob> threats,
+            List<LivingEntity> threats,
             int localRouteVersion,
             int localWaypointIndex) {
         Recovery recovery = findRecovery(slime);
@@ -1514,7 +1642,7 @@ public class SlimeFormMod implements ModInitializer {
 
         Set<UUID> threatIds = new HashSet<>();
         Map<UUID, BlockPos> threatPositions = new HashMap<>();
-        for (Mob threat : threats) {
+        for (LivingEntity threat : threats) {
             threatIds.add(threat.getUUID());
             threatPositions.put(threat.getUUID(), threat.blockPosition());
         }
@@ -1645,7 +1773,7 @@ public class SlimeFormMod implements ModInitializer {
                 && endpointDisplacement > bestEndpointDisplacement);
     }
 
-    static boolean isRecoveryFleePathSafe(Slime slime, Path path, List<Mob> threats) {
+    static boolean isRecoveryFleePathSafe(Slime slime, Path path, List<LivingEntity> threats) {
         if (path == null || threats.isEmpty() || path.getNodeCount() < 2) {
             return false;
         }
@@ -1653,7 +1781,7 @@ public class SlimeFormMod implements ModInitializer {
         return minimumPathThreatDistanceSqr(path, threats) >= currentSafety - 1.0D;
     }
 
-    static void visualizeRecoveryFleePath(Slime slime, Path path, List<Mob> threats) {
+    static void visualizeRecoveryFleePath(Slime slime, Path path, List<LivingEntity> threats) {
         if (!SlimeFormConfig.get().recoveryFleePathDebug
                 || slime.level().isClientSide()
                 || path == null
@@ -1715,7 +1843,7 @@ public class SlimeFormMod implements ModInitializer {
                     0.0D);
         }
 
-        for (Mob threat : threats) {
+        for (LivingEntity threat : threats) {
             level.sendParticles(
                     viewer,
                     ParticleTypes.FLAME,
@@ -1740,7 +1868,7 @@ public class SlimeFormMod implements ModInitializer {
         return nodes;
     }
 
-    private static double minimumPathThreatDistanceSqr(Path path, List<Mob> threats) {
+    private static double minimumPathThreatDistanceSqr(Path path, List<LivingEntity> threats) {
         double minimumDistance = Double.MAX_VALUE;
         for (int index = 1; index < path.getNodeCount(); index++) {
             minimumDistance = Math.min(
@@ -1750,9 +1878,9 @@ public class SlimeFormMod implements ModInitializer {
         return minimumDistance;
     }
 
-    private static double minimumThreatDistanceSqr(BlockPos position, List<Mob> threats) {
+    private static double minimumThreatDistanceSqr(BlockPos position, List<LivingEntity> threats) {
         double minimumDistance = Double.MAX_VALUE;
-        for (Mob threat : threats) {
+        for (LivingEntity threat : threats) {
             minimumDistance = Math.min(minimumDistance, position.distSqr(threat.blockPosition()));
         }
         return minimumDistance;
@@ -1995,18 +2123,20 @@ public class SlimeFormMod implements ModInitializer {
         recovery.clearFleeDangerBar();
         int removed = 0;
         String lineageId = recovery.lineageId();
+        List<UUID> lineageEntityIds = List.copyOf(recovery.lineageEntityIds());
+        List<UUID> assistedSlimeIds = List.copyOf(recovery.assistedSlimeIds());
 
         // UUIDs are only a fallback for entities that may no longer be returned
         // by the normal entity scan. Entity-owned lineage remains authoritative.
         for (ServerLevel level : server.getAllLevels()) {
-            for (UUID lineageEntityId : recovery.lineageEntityIds()) {
+            for (UUID lineageEntityId : lineageEntityIds) {
                 Entity entity = level.getEntity(lineageEntityId);
                 if (entity instanceof Slime slime && !slime.isRemoved()) {
                     slime.discard();
                     removed++;
                 }
             }
-            for (UUID assistedId : recovery.assistedSlimeIds()) {
+            for (UUID assistedId : assistedSlimeIds) {
                 Entity entity = level.getEntity(assistedId);
                 if (entity instanceof Slime slime && !slime.isRemoved()) {
                     slime.setTarget(null);
