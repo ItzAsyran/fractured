@@ -560,6 +560,7 @@ public class SlimeFormMod implements ModInitializer {
         return Command.SINGLE_SUCCESS;
     }
 
+
     private static int setItemDebugRotation(ServerPlayer player, char axis, double value) {
         SlimeFormConfig config = SlimeFormConfig.get();
         switch (axis) {

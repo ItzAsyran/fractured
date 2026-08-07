@@ -70,12 +70,18 @@ public final class SlimeFormVisuals {
 
     private static final class ItemDisplaySession {
         private final VisualMode mode;
+        private final ServerLevel level;
+        private final UUID slimeId;
+        private final long createdGameTime;
         private final Map<DisplaySlot, UUID> displayIds = new EnumMap<>(DisplaySlot.class);
         private final Map<DisplaySlot, Vec3> offsets = new EnumMap<>(DisplaySlot.class);
         private final Map<DisplaySlot, ItemStack> snapshots = new EnumMap<>(DisplaySlot.class);
 
-        private ItemDisplaySession(VisualMode mode) {
+        private ItemDisplaySession(VisualMode mode, ServerLevel level, UUID slimeId) {
             this.mode = mode;
+            this.level = level;
+            this.slimeId = slimeId;
+            this.createdGameTime = level.getGameTime();
         }
     }
 
@@ -117,12 +123,20 @@ public final class SlimeFormVisuals {
                     removeItemDisplays(player);
                 } else {
                     ItemDisplaySession session = ITEM_DISPLAY_SESSIONS.get(player.getUUID());
-                    if (session == null || session.mode != mode) {
+                    if (session == null
+                            || session.mode != mode
+                            || session.level != player.level()
+                            || !session.slimeId.equals(slime.getUUID())) {
                         removeItemDisplays(player);
-                        session = createItemDisplaySession(player, player.level(), slime.getYRot(), mode);
-                        ITEM_DISPLAY_SESSIONS.put(player.getUUID(), session);
+                        session = createItemDisplaySession(
+                                player, player.level(), slime, mode);
+                        if (session != null) {
+                            ITEM_DISPLAY_SESSIONS.put(player.getUUID(), session);
+                        }
                     }
-                    syncItemDisplays(player, slime, session);
+                    if (session != null) {
+                        syncItemDisplays(player, slime, session);
+                    }
                 }
             }
         } else {
@@ -289,11 +303,25 @@ public final class SlimeFormVisuals {
             return;
         }
 
-        if (session.displayIds.isEmpty()) {
+        if (session.level != slime.level() || !session.slimeId.equals(slime.getUUID())) {
+            invalidateItemDisplaySession(player, session);
             return;
         }
 
         long time = slime.level().getGameTime();
+        if (time == session.createdGameTime) {
+            return;
+        }
+
+        if (!hasAllExpectedDisplays((ServerLevel) slime.level(), session)) {
+            invalidateItemDisplaySession(player, session);
+            return;
+        }
+
+        if (session.displayIds.isEmpty()) {
+            return;
+        }
+
         double topY = slime.getY() + slime.getBbHeight();
         if (SlimeFormConfig.get().itemDebugShowAxes && time % 5L == 0L) {
             sendItemDebugAxisMarkers(slime, topY);
@@ -381,8 +409,8 @@ public final class SlimeFormVisuals {
     }
 
     private static ItemDisplaySession createItemDisplaySession(
-            ServerPlayer player, ServerLevel level, float slimeYaw, VisualMode mode) {
-        ItemDisplaySession session = new ItemDisplaySession(mode);
+            ServerPlayer player, ServerLevel level, Slime slime, VisualMode mode) {
+        ItemDisplaySession session = new ItemDisplaySession(mode, level, slime.getUUID());
         Map<DisplaySlot, ItemStack> snapshots = session.snapshots;
         for (DisplaySlot slot : DisplaySlot.values()) {
             ItemStack snapshot = itemFor(player, slot).copy();
@@ -390,15 +418,30 @@ public final class SlimeFormVisuals {
                 snapshots.put(slot, snapshot);
             }
         }
-        session.offsets.putAll(createRandomOffsets(level, slimeYaw, snapshots));
+        session.offsets.putAll(createRandomOffsets(level, slime.getYRot(), snapshots));
         for (DisplaySlot slot : DisplaySlot.values()) {
             ItemStack snapshot = snapshots.get(slot);
             if (snapshot != null) {
-                createItemDisplay(player, level, snapshot, slot,
+                createItemDisplay(player, level, slime, snapshot, slot,
                         session.offsets.getOrDefault(slot, Vec3.ZERO), session);
             }
         }
         return session;
+    }
+
+    private static boolean hasAllExpectedDisplays(
+            ServerLevel level, ItemDisplaySession session) {
+        for (DisplaySlot slot : DisplaySlot.values()) {
+            if (!session.snapshots.containsKey(slot)) {
+                continue;
+            }
+            UUID displayId = session.displayIds.get(slot);
+            if (!(level.getEntity(displayId) instanceof ItemDisplay display)
+                    || display.isRemoved()) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static Map<DisplaySlot, Vec3> createRandomOffsets(
@@ -491,6 +534,7 @@ public final class SlimeFormVisuals {
     private static void createItemDisplay(
             ServerPlayer player,
             ServerLevel level,
+            Slime slime,
             ItemStack stack,
             DisplaySlot slot,
             Vec3 offset,
@@ -503,6 +547,7 @@ public final class SlimeFormVisuals {
         display.setInvulnerable(true);
         display.getSlot(0).set(stack.copy());
         ((SlimeItemDisplayAccess) display).slimeform$setItemTransform(ItemDisplayContext.GROUND);
+        display.setPos(slime.getX(), slime.getY() + slime.getBbHeight(), slime.getZ());
         level.addFreshEntity(display);
         session.displayIds.put(slot, display.getUUID());
     }
@@ -512,16 +557,22 @@ public final class SlimeFormVisuals {
         ItemDisplaySession session = ITEM_DISPLAY_SESSIONS.remove(player.getUUID());
         if (session != null) {
             for (UUID displayId : session.displayIds.values()) {
-                if (player.level().getEntity(displayId) instanceof ItemDisplay display
+                if (session.level.getEntity(displayId) instanceof ItemDisplay display
                         && removed.add(display.getUUID())) {
                     display.discard();
                 }
             }
+            discardTaggedItemDisplays(session.level, player, removed);
         }
 
-        for (ItemDisplay display : player.level().getEntitiesOfClass(
+        discardTaggedItemDisplays(player.level(), player, removed);
+    }
+
+    private static void discardTaggedItemDisplays(
+            ServerLevel level, ServerPlayer player, Set<UUID> removed) {
+        for (ItemDisplay display : level.getEntitiesOfClass(
                 ItemDisplay.class,
-                new AABB(player.blockPosition()).inflate(8.0D),
+                new AABB(player.blockPosition()).inflate(16.0D),
                 display -> display.getTags().stream().anyMatch(tag -> tag.startsWith(itemDisplayPrefix(player))))) {
             if (removed.add(display.getUUID())) {
                 display.discard();
