@@ -12,6 +12,8 @@
 		"SlimeMoveControlMixin",
 		"SlimeRecoveryFleeGoalMixin",
 		"SlimeCombatMixin",
+		"FlowStateSlimeMixin",
+		"FlowStateCollisionMixin",
 		"SlimeFormPlayerMixin",
 		"SlimeFormPlayerSoundMixin",
 		"SlimeFormPlayerStepSoundMixin",
@@ -28,6 +30,7 @@
 	],
 	"server": [],
 	"client": [
+		"FlowStateMouseMixin",
 		"SlimeRecoveryDebugRendererMixin",
 		"SlimeDeathScreenMixin",
 		"SlimeClientRecoveryMixin",

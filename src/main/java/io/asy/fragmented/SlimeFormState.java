@@ -26,12 +26,7 @@ public final class SlimeFormState {
     }
 
     public static int getSize(Player player) {
-        for (int size = SlimeFormConfig.MAX_MAX_SLIME_SIZE; size >= MIN_SIZE; size--) {
-            if (player.getTags().contains(SIZE_PREFIX + size)) {
-                return Math.min(size, getMaxSize());
-            }
-        }
-        return getMaxSize();
+        return taggedSize(player);
     }
 
     /**
@@ -39,18 +34,16 @@ public final class SlimeFormState {
      * max-health fallback when synchronized size tags are unavailable.
      */
     public static int getRiderSize(Player player) {
-        for (int size = SlimeFormConfig.MAX_MAX_SLIME_SIZE; size >= MIN_SIZE; size--) {
-            if (player.getTags().contains(SIZE_PREFIX + size)) {
-                return Math.min(size, getMaxSize());
-            }
+        int taggedSize = taggedSize(player);
+        if (taggedSize != getMaxSize() || player.getTags().contains(SIZE_PREFIX + taggedSize)) {
+            return taggedSize;
         }
 
         if (player.level().isClientSide()) {
             float maxHealth = player.getMaxHealth();
-            for (int size = getMaxSize(); size >= MIN_SIZE; size--) {
-                if (maxHealth == maxHealthForSize(size)) {
-                    return size;
-                }
+            int size = (int) Math.round(Math.sqrt(maxHealth));
+            if (size >= MIN_SIZE && maxHealth == maxHealthForSize(size)) {
+                return Math.min(size, getMaxSize());
             }
         }
 
@@ -64,22 +57,37 @@ public final class SlimeFormState {
     }
 
     public static void setSize(Player player, int size) {
-        for (int current = MIN_SIZE; current <= SlimeFormConfig.MAX_MAX_SLIME_SIZE; current++) {
-            player.removeTag(SIZE_PREFIX + current);
-        }
+        player.getTags().removeIf(tag -> tag.startsWith(SIZE_PREFIX));
         player.addTag(SIZE_PREFIX + Math.max(MIN_SIZE, Math.min(getMaxSize(), size)));
     }
 
     public static void deactivate(Player player) {
         player.removeTag(SlimeFormMod.SLIME_FORM_TAG);
-        for (int size = MIN_SIZE; size <= SlimeFormConfig.MAX_MAX_SLIME_SIZE; size++) {
-            player.removeTag(SIZE_PREFIX + size);
-        }
+        player.getTags().removeIf(tag -> tag.startsWith(SIZE_PREFIX));
         removeHealthModifier(player);
     }
 
     public static float maxHealthForSize(int size) {
-        return size * size;
+        return (float) ((double) size * size);
+    }
+
+    private static int taggedSize(Player player) {
+        int size = player.getTags().stream()
+                .filter(tag -> tag.startsWith(SIZE_PREFIX))
+                .map(tag -> tag.substring(SIZE_PREFIX.length()))
+                .mapToInt(SlimeFormState::parseSizeTag)
+                .filter(parsedSize -> parsedSize >= MIN_SIZE)
+                .max()
+                .orElse(getMaxSize());
+        return Math.min(size, getMaxSize());
+    }
+
+    private static int parseSizeTag(String value) {
+        try {
+            return Integer.parseInt(value);
+        } catch (NumberFormatException ignored) {
+            return 0;
+        }
     }
 
     /**

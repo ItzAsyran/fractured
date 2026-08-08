@@ -1,6 +1,7 @@
 package io.asy.fragmented.mixin;
 
 import io.asy.fragmented.SlimeFormMod;
+import io.asy.fragmented.FlowStateManager;
 import net.minecraft.network.protocol.game.ServerboundInteractPacket;
 import net.minecraft.network.protocol.game.ServerboundContainerClickPacket;
 import net.minecraft.network.protocol.game.ServerboundChatPacket;
@@ -10,6 +11,7 @@ import net.minecraft.network.protocol.game.ServerboundSetCarriedItemPacket;
 import net.minecraft.network.protocol.game.ServerboundSwingPacket;
 import net.minecraft.network.protocol.game.ServerboundUseItemOnPacket;
 import net.minecraft.network.protocol.game.ServerboundUseItemPacket;
+import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.ServerGamePacketListenerImpl;
 import org.spongepowered.asm.mixin.Mixin;
@@ -21,6 +23,10 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public abstract class SlimeDormantConnectionMixin {
     private boolean slimeform$blockIfDormant(CallbackInfo ci) {
         ServerPlayer player = ((SlimeServerConnectionAccessor) this).slimeform$getPlayer();
+        if (FlowStateManager.isPossessed(player)) {
+            ci.cancel();
+            return true;
+        }
         if (SlimeFormMod.isDormant(player)) {
             SlimeFormMod.wakeDormant(player);
             ci.cancel();
@@ -33,6 +39,14 @@ public abstract class SlimeDormantConnectionMixin {
     private void slimeform$action(ServerboundPlayerActionPacket packet, CallbackInfo ci) {
         if (!slimeform$blockIfDormant(ci)) {
             SlimeFormMod.recordActivity(((SlimeServerConnectionAccessor) this).slimeform$getPlayer());
+        }
+    }
+
+    @Inject(method = "handleMovePlayer", at = @At("HEAD"), cancellable = true)
+    private void slimeform$flowStateMovement(ServerboundMovePlayerPacket packet, CallbackInfo ci) {
+        ServerPlayer player = ((SlimeServerConnectionAccessor) this).slimeform$getPlayer();
+        if (FlowStateManager.isPossessed(player)) {
+            ci.cancel();
         }
     }
 

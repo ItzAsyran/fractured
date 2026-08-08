@@ -35,7 +35,6 @@ public class SlimeFormConfig implements me.shedaniel.autoconfig.ConfigData {
     public static final double MAX_ITEM_DISPLAY_BOB = 1.0D;
 
     @ConfigEntry.Gui.Tooltip
-    @ConfigEntry.BoundedDiscrete(min = MIN_MAX_SLIME_SIZE, max = MAX_MAX_SLIME_SIZE)
     public int maxSlimeSize = 5;
 
     @ConfigEntry.Gui.Tooltip
@@ -106,7 +105,11 @@ public class SlimeFormConfig implements me.shedaniel.autoconfig.ConfigData {
     public double itemDisplayBobAmplitude = 0.01D;
     public boolean itemDebugShowAxes = false;
 
-    public boolean experimentalFeaturesEnabled = false;
+    public boolean flowStateEnabled = false;
+    public boolean flowStateDebug = false;
+    public boolean flowStateAutoJump = true;
+    public int flowStateTransformSeconds = 2;
+    public int flowStateExitSeconds = 5;
 
     @ConfigEntry.BoundedDiscrete(
             min = MIN_AFK_INACTIVITY_SECONDS,
@@ -126,7 +129,7 @@ public class SlimeFormConfig implements me.shedaniel.autoconfig.ConfigData {
     }
 
     public int effectiveMaxSlimeSize() {
-        return clamp(maxSlimeSize, MIN_MAX_SLIME_SIZE, MAX_MAX_SLIME_SIZE);
+        return Math.max(MIN_MAX_SLIME_SIZE, maxSlimeSize);
     }
 
     public int effectiveSplitDurationSeconds() {
@@ -164,6 +167,14 @@ public class SlimeFormConfig implements me.shedaniel.autoconfig.ConfigData {
 
     public int effectiveAfkInactivitySeconds() {
         return clamp(afkInactivitySeconds, MIN_AFK_INACTIVITY_SECONDS, MAX_AFK_INACTIVITY_SECONDS);
+    }
+
+    public int flowStateTransformTicks() {
+        return Math.max(1, flowStateTransformSeconds) * 20;
+    }
+
+    public int flowStateExitTicks() {
+        return Math.max(1, flowStateExitSeconds) * 20;
     }
 
     public double effectiveRiderOffsetX() {

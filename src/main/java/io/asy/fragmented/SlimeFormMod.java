@@ -190,15 +190,25 @@ public class SlimeFormMod implements ModInitializer {
         PayloadTypeRegistry.playC2S().register(
                 SlimeFormPayloads.WAKE_DORMANT_TYPE,
                 SlimeFormPayloads.WAKE_DORMANT_CODEC);
+        PayloadTypeRegistry.playC2S().register(
+                SlimeFormPayloads.FLOW_STATE_INPUT_TYPE,
+                SlimeFormPayloads.FLOW_STATE_INPUT_CODEC);
+        PayloadTypeRegistry.playS2C().register(
+                SlimeFormPayloads.FLOW_STATE_CAMERA_TYPE,
+                SlimeFormPayloads.FLOW_STATE_CAMERA_CODEC);
         ServerPlayNetworking.registerGlobalReceiver(
                 SlimeFormPayloads.WAKE_DORMANT_TYPE,
                 (payload, context) -> wakeDormant(context.player()));
+        ServerPlayNetworking.registerGlobalReceiver(
+                SlimeFormPayloads.FLOW_STATE_INPUT_TYPE,
+                (payload, context) -> FlowStateManager.handleInput(context.player(), payload));
         LOGGER.info("Sliming.");
 
         ServerTickEvents.END_SERVER_TICK.register(server -> {
             tickRecoveries(server);
             tickPassiveSlimeSpawning(server);
             tickDormantPlayers(server);
+            FlowStateManager.tick(server);
             SlimeFormVisuals.processPendingRemovals(server);
         });
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
@@ -215,6 +225,7 @@ public class SlimeFormMod implements ModInitializer {
         });
         ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> {
             ServerPlayer player = handler.getPlayer();
+            FlowStateManager.stop(player, false);
             clearCalibrationFor(player);
             wakeDormant(player);
             SlimeFormVisuals.remove(player, false);
@@ -596,6 +607,7 @@ public class SlimeFormMod implements ModInitializer {
     }
 
     private static int deactivateSlimeForm(ServerPlayer player) {
+        FlowStateManager.stop(player, true);
         wakeDormant(player);
         SlimeFormState.deactivate(player);
         LOGGER.info("[slimeform] Deactivated slime form for {} ({})", player.getName().getString(), player.getUUID());

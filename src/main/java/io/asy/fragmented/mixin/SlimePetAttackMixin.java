@@ -1,6 +1,7 @@
 package io.asy.fragmented.mixin;
 
 import io.asy.fragmented.SlimeFormMod;
+import io.asy.fragmented.FlowStateManager;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.monster.Slime;
@@ -16,7 +17,7 @@ public abstract class SlimePetAttackMixin {
     @Inject(method = "attack", at = @At("HEAD"), cancellable = true)
     private void slimeform$blockDormantAttack(Entity target, CallbackInfo ci) {
         Player player = (Player) (Object) this;
-        if (SlimeFormMod.isDormant(player)) {
+        if (SlimeFormMod.isDormant(player) || FlowStateManager.isPossessed(player)) {
             if (!player.level().isClientSide()
                     && player instanceof net.minecraft.server.level.ServerPlayer serverPlayer) {
                 SlimeFormMod.wakeDormant(serverPlayer);
@@ -34,7 +35,7 @@ public abstract class SlimePetAttackMixin {
             net.minecraft.world.InteractionHand hand,
             CallbackInfoReturnable<net.minecraft.world.InteractionResult> cir) {
         Player player = (Player) (Object) this;
-        if (SlimeFormMod.isDormant(player)) {
+        if (SlimeFormMod.isDormant(player) || FlowStateManager.isPossessed(player)) {
             if (!player.level().isClientSide()
                     && player instanceof net.minecraft.server.level.ServerPlayer serverPlayer) {
                 SlimeFormMod.wakeDormant(serverPlayer);

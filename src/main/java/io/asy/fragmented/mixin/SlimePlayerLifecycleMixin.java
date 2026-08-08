@@ -2,6 +2,7 @@ package io.asy.fragmented.mixin;
 
 import io.asy.fragmented.SlimeFormMod;
 import io.asy.fragmented.SlimeFormState;
+import io.asy.fragmented.FlowStateManager;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.damagesource.DamageSource;
@@ -49,6 +50,7 @@ public abstract class SlimePlayerLifecycleMixin {
     @Inject(method = "die", at = @At("HEAD"))
     private void slimeform$splitOnDeath(DamageSource source, CallbackInfo ci) {
         ServerPlayer player = (ServerPlayer) (Object) this;
+        FlowStateManager.stop(player, false);
         if (slimeform$deathHandled || !SlimeFormState.isActive(player)) {
             return;
         }

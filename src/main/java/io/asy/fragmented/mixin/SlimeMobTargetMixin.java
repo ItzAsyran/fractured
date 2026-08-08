@@ -1,6 +1,7 @@
 package io.asy.fragmented.mixin;
 
 import io.asy.fragmented.SlimeFormMod;
+import io.asy.fragmented.FlowStateManager;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.monster.Slime;
@@ -23,6 +24,7 @@ public abstract class SlimeMobTargetMixin {
         if ((Object) this instanceof Mob mob
                 && target instanceof Player player
                 && (player.getTags().contains(SlimeFormMod.SLIME_DORMANT_TAG)
+                || FlowStateManager.isPossessed(player)
                 || (mob instanceof Slime
                 && player.getTags().contains(SlimeFormMod.SLIME_FORM_TAG)))) {
             if (!player.getUUID().equals(slimeform$lastRejectedTarget)) {
@@ -41,6 +43,7 @@ public abstract class SlimeMobTargetMixin {
         Mob mob = (Mob) (Object) this;
         if (mob.getTarget() instanceof Player player
                 && (player.getTags().contains(SlimeFormMod.SLIME_DORMANT_TAG)
+                || FlowStateManager.isPossessed(player)
                 || (mob instanceof Slime
                 && player.getTags().contains(SlimeFormMod.SLIME_FORM_TAG)))) {
             if (!player.getUUID().equals(slimeform$lastRejectedTarget)) {

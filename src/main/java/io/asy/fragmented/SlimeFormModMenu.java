@@ -17,7 +17,7 @@ public class SlimeFormModMenu implements ModMenuApi {
         return parent -> createConfigScreen(parent);
     }
 
-    private static Screen createConfigScreen(Screen parent) {
+    static Screen createConfigScreen(Screen parent) {
         SlimeFormConfig config = SlimeFormConfig.get();
         ConfigBuilder builder = ConfigBuilder.create()
                 .setParentScreen(parent)
@@ -135,13 +135,19 @@ public class SlimeFormModMenu implements ModMenuApi {
 
         ConfigCategory experimental = builder.getOrCreateCategory(
                 Component.translatable("config.slimeform.category.experimental"));
-        experimental.addEntry(new ExperimentalFeaturesEntry(
-                Component.translatable("config.slimeform.experimental.enable"),
-                config.experimentalFeaturesEnabled));
-        if (config.experimentalFeaturesEnabled) {
-            experimental.addEntry(entries.startTextDescription(Component.translatable(
-                    "config.slimeform.experimental.available")).build());
-        }
+        SubCategoryBuilder flowState = entries.startSubCategory(
+                Component.translatable("config.slimeform.experimental.flow_state"));
+            addToggle(flowState, entries, "flow_state_enabled", config.flowStateEnabled,
+                    value -> config.flowStateEnabled = value);
+            addToggle(flowState, entries, "flow_state_debug", config.flowStateDebug,
+                    value -> config.flowStateDebug = value);
+            addToggle(flowState, entries, "flow_state_auto_jump", config.flowStateAutoJump,
+                value -> config.flowStateAutoJump = value);
+        addIntSlider(flowState, entries, "flow_state_transform_seconds", config.flowStateTransformSeconds,
+                1, 10, value -> config.flowStateTransformSeconds = value, 2);
+        addIntSlider(flowState, entries, "flow_state_exit_seconds", config.flowStateExitSeconds,
+                1, 15, value -> config.flowStateExitSeconds = value, 5);
+        experimental.addEntry(flowState.setExpanded(true).build());
 
         return builder.build();
     }
@@ -153,9 +159,23 @@ public class SlimeFormModMenu implements ModMenuApi {
                 .setTooltip(Component.translatable("config.slimeform." + key + ".tooltip")).build());
     }
 
+    private static void addToggle(SubCategoryBuilder category, ConfigEntryBuilder entries, String key,
+                                  boolean current, java.util.function.Consumer<Boolean> save) {
+        category.add(entries.startBooleanToggle(Component.translatable("config.slimeform." + key), current)
+                .setDefaultValue(current).setSaveConsumer(save)
+                .setTooltip(Component.translatable("config.slimeform." + key + ".tooltip")).build());
+    }
+
     private static void addIntSlider(ConfigCategory category, ConfigEntryBuilder entries, String key, int current,
                                      int min, int max, java.util.function.IntConsumer save, int defaultValue) {
         category.addEntry(entries.startIntSlider(Component.translatable("config.slimeform." + key), current, min, max)
+                .setDefaultValue(defaultValue).setSaveConsumer(save::accept)
+                .setTooltip(Component.translatable("config.slimeform." + key + ".tooltip")).build());
+    }
+
+    private static void addIntSlider(SubCategoryBuilder category, ConfigEntryBuilder entries, String key, int current,
+                                     int min, int max, java.util.function.IntConsumer save, int defaultValue) {
+        category.add(entries.startIntSlider(Component.translatable("config.slimeform." + key), current, min, max)
                 .setDefaultValue(defaultValue).setSaveConsumer(save::accept)
                 .setTooltip(Component.translatable("config.slimeform." + key + ".tooltip")).build());
     }
