@@ -14,6 +14,7 @@
 		"SlimeCombatMixin",
 		"MagmaCubeRetaliationMixin",
 		"SlimeFormDoPhaseCollisionMixin",
+		"SlimeChunkSpawnRuleMixin",
 		"SlimeMorphDamageMixin",
 		"SlimeFormPlayerMixin",
 		"SlimeFormPlayerSoundMixin",
@@ -31,6 +32,8 @@
 	],
 	"server": [],
 	"client": [
+		"SlimeEntityHighlightGlowMixin",
+		"SlimeEntityHighlightColorMixin",
 		"SlimeMorphCameraMixin",
 		"SlimeMorphItemRendererMixin",
 		"SlimeRecoveryDebugRendererMixin",

@@ -1,16 +1,47 @@
 package io.asy.fragmented;
 
 import net.fabricmc.api.ClientModInitializer;
+import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.VanillaHudElements;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.KeyMapping;
 import net.minecraft.client.gui.GuiGraphics;
+import com.mojang.blaze3d.platform.InputConstants;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.monster.Enemy;
+import net.minecraft.world.entity.monster.Slime;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.phys.AABB;
+import org.lwjgl.glfw.GLFW;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 
+import java.util.List;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.Set;
+
 public final class SlimeFormClient implements ClientModInitializer {
+    private static final int SLIME_HIGHLIGHT_COLOR = 0x55FF55;
+    private static final int HOSTILE_HIGHLIGHT_COLOR = 0xFF5555;
+    private static final int DEFAULT_HIGHLIGHT_COLOR = 0xFFFFFF;
+    private static final KeyMapping HIGHLIGHT_SLIMES_KEY = KeyBindingHelper.registerKeyBinding(
+            new KeyMapping(
+                    "key.slimeform.highlight_nearby",
+                    InputConstants.Type.KEYSYM,
+                    GLFW.GLFW_KEY_G,
+                    KeyMapping.Category.register(Identifier.fromNamespaceAndPath(
+                            SlimeFormMod.MOD_ID, "controls"))));
+    private static SlimeFormClient instance;
+    private static volatile boolean slimeChunksEnabled;
+    private static volatile List<SlimeFormPayloads.AuraSource> slimeChunkSources = List.of();
+    private final Map<Integer, Boolean> highlightedEntities = new HashMap<>();
     private boolean wakeSent;
     private int morphPhase;
     private int morphRemaining;
@@ -21,11 +52,18 @@ public final class SlimeFormClient implements ClientModInitializer {
 
     @Override
     public void onInitializeClient() {
+        instance = this;
         ClientTickEvents.END_CLIENT_TICK.register(this::tick);
         ClientPlayNetworking.registerGlobalReceiver(
                 SlimeFormPayloads.PHASE_STATE_TYPE,
                 (payload, context) -> context.client().execute(
                         () -> SlimeFormState.setClientPhaseEnabled(payload.enabled())));
+        ClientPlayNetworking.registerGlobalReceiver(
+                SlimeFormPayloads.SLIME_CHUNKS_STATE_TYPE,
+                (payload, context) -> context.client().execute(() -> {
+                    slimeChunksEnabled = payload.enabled();
+                    slimeChunkSources = List.copyOf(payload.sources());
+                }));
         ClientPlayNetworking.registerGlobalReceiver(
                 SlimeFormPayloads.DORMANT_DEBUG_TYPE,
                 (payload, context) -> context.client().execute(() -> {
@@ -53,6 +91,7 @@ public final class SlimeFormClient implements ClientModInitializer {
 
     private void tick(Minecraft client) {
         if (client.player == null) {
+            clearHighlightedEntities(client);
             wakeSent = false;
             morphPhase = 0;
             morphRemaining = 0;
@@ -61,8 +100,12 @@ public final class SlimeFormClient implements ClientModInitializer {
             dormantDebugRemainingTicks = 0;
             dormantDebugLastUpdateTick = 0L;
             SlimeFormState.setClientPhaseEnabled(false);
+            slimeChunksEnabled = false;
+            slimeChunkSources = List.of();
             return;
         }
+
+        updateHighlightedEntities(client);
 
         SlimeFormConfig config = SlimeFormConfig.get();
         boolean activeTag = SlimeFormState.isActive(client.player);
@@ -99,6 +142,72 @@ public final class SlimeFormClient implements ClientModInitializer {
         } else if (!inputDown) {
             wakeSent = false;
         }
+    }
+
+    public static boolean isClientSlimeChunk(int chunkX, int chunkZ) {
+        if (!slimeChunksEnabled) {
+            return false;
+        }
+        for (SlimeFormPayloads.AuraSource source : slimeChunkSources) {
+            if (Math.abs(chunkX - source.chunkX()) <= 8
+                    && Math.abs(chunkZ - source.chunkZ()) <= 8) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public static int highlightColor(Entity entity) {
+        if (instance == null || !instance.highlightedEntities.containsKey(entity.getId())) {
+            return -1;
+        }
+        if (entity instanceof Slime) {
+            return SLIME_HIGHLIGHT_COLOR;
+        }
+        if (entity instanceof Enemy) {
+            return HOSTILE_HIGHLIGHT_COLOR;
+        }
+        if (entity instanceof Player || entity instanceof LivingEntity) {
+            return DEFAULT_HIGHLIGHT_COLOR;
+        }
+        return DEFAULT_HIGHLIGHT_COLOR;
+    }
+
+    private void updateHighlightedEntities(Minecraft client) {
+        if (!slimeChunksEnabled || !HIGHLIGHT_SLIMES_KEY.isDown()) {
+            clearHighlightedEntities(client);
+            return;
+        }
+
+        Set<Integer> current = new HashSet<>();
+        for (SlimeFormPayloads.AuraSource source : slimeChunkSources) {
+            double minX = (source.chunkX() - 8) * 16.0D;
+            double minZ = (source.chunkZ() - 8) * 16.0D;
+            AABB area = new AABB(
+                    minX, client.level.getMinY(), minZ,
+                    minX + 17 * 16.0D, client.level.getMaxY(), minZ + 17 * 16.0D);
+            for (Entity entity : client.level.getEntities(
+                    (Entity) null, area, candidate -> candidate instanceof LivingEntity)) {
+                current.add(entity.getId());
+                if (!highlightedEntities.containsKey(entity.getId())) {
+                    highlightedEntities.put(entity.getId(), true);
+                }
+            }
+        }
+
+        Iterator<Map.Entry<Integer, Boolean>> iterator = highlightedEntities.entrySet().iterator();
+        while (iterator.hasNext()) {
+            Map.Entry<Integer, Boolean> entry = iterator.next();
+            if (current.contains(entry.getKey())) {
+                continue;
+            }
+            Entity entity = client.level.getEntity(entry.getKey());
+            iterator.remove();
+        }
+    }
+
+    private void clearHighlightedEntities(Minecraft client) {
+        highlightedEntities.clear();
     }
 
     private void renderMorphHud(GuiGraphics graphics, net.minecraft.client.DeltaTracker tickCounter) {

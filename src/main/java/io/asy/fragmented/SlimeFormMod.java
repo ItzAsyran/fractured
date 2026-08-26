@@ -43,6 +43,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.LevelAccessor;
 import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.NaturalSpawner;
@@ -98,6 +99,7 @@ public class SlimeFormMod implements ModInitializer {
     public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
     private static final Map<UUID, Recovery> RECOVERIES = new HashMap<>();
     private static final Map<UUID, Long> PASSIVE_SPAWN_NEXT_ATTEMPT = new HashMap<>();
+    private static SlimeFormPayloads.SlimeChunksStatePayload lastSlimeChunksState;
     private static final String PASSIVE_SLIME_TAG = "slimeform.passive_spawn";
     private static final double PASSIVE_SPAWN_MIN_DISTANCE = 8.0D;
     private static final double PASSIVE_SPAWN_MAX_DISTANCE = 24.0D;
@@ -199,6 +201,9 @@ public class SlimeFormMod implements ModInitializer {
                 SlimeFormPayloads.PHASE_STATE_TYPE,
                 SlimeFormPayloads.PHASE_STATE_CODEC);
         PayloadTypeRegistry.playS2C().register(
+                SlimeFormPayloads.SLIME_CHUNKS_STATE_TYPE,
+                SlimeFormPayloads.SLIME_CHUNKS_STATE_CODEC);
+        PayloadTypeRegistry.playS2C().register(
                 SlimeFormPayloads.DORMANT_DEBUG_TYPE,
                 SlimeFormPayloads.DORMANT_DEBUG_CODEC);
         PayloadTypeRegistry.playC2S().register(
@@ -219,6 +224,7 @@ public class SlimeFormMod implements ModInitializer {
             tickRecoveries(server);
             tickPassiveSlimeSpawning(server);
             tickDormantPlayers(server);
+            tickSlimeChunksState(server);
             SlimeMorphManager.tick(server);
             SlimeFormVisuals.processPendingRemovals(server);
         });
@@ -232,6 +238,7 @@ public class SlimeFormMod implements ModInitializer {
             SlimeFormState.applyHealth(player, false);
             ServerPlayNetworking.send(player,
                     new SlimeFormPayloads.PhaseStatePayload(SlimeFormConfig.get().doPhaseEnabled));
+            ServerPlayNetworking.send(player, currentSlimeChunksState(server));
             ACTIVITY_TICKS.put(player.getUUID(), player.level().getGameTime());
             ACTIVITY_POSITIONS.put(player.getUUID(), player.position());
             LOGGER.info("[slimeform] Joined {}: active={}, size={}, maxHealth={}, health={}",
@@ -280,12 +287,7 @@ public class SlimeFormMod implements ModInitializer {
                                 .then(Commands.literal("status")
                                         .executes(context -> showCalibrationStatus(
                                                 context.getSource().getPlayerOrException()))))
-                        .then(Commands.literal("experimental")
-                                .then(Commands.literal("doPhase")
-                                        .then(Commands.argument("enabled", BoolArgumentType.bool())
-                                                .executes(context -> setDoPhase(
-                                                        context.getSource().getPlayerOrException(),
-                                                        BoolArgumentType.getBool(context, "enabled"))))))
+                        .then(experimentalCommands())
                         .then(Commands.literal("itemdebug")
                                 .then(itemDebugHandCommands("mainhand"))
                                 .then(itemDebugHandCommands("offhand"))
@@ -316,6 +318,20 @@ public class SlimeFormMod implements ModInitializer {
                                                                 context.getSource().getPlayerOrException(),
                                                                 'z',
                                                                 DoubleArgumentType.getDouble(context, "value")))))))));
+    }
+
+    private static LiteralArgumentBuilder<CommandSourceStack> experimentalCommands() {
+        return Commands.literal("experimental")
+                .then(Commands.literal("doPhase")
+                        .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                .executes(context -> setDoPhase(
+                                        context.getSource().getPlayerOrException(),
+                                        BoolArgumentType.getBool(context, "enabled")))))
+                .then(Commands.literal("slimeChunks")
+                        .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                .executes(context -> setSlimeChunks(
+                                        context.getSource().getPlayerOrException(),
+                                        BoolArgumentType.getBool(context, "enabled")))));
     }
 
     private static int beginCalibration(ServerPlayer player, CalibrationOrientation orientation) {
@@ -611,6 +627,75 @@ public class SlimeFormMod implements ModInitializer {
                 "SlimeForm experimental block phasing %s.",
                 enabled ? "enabled" : "disabled")).withStyle(ChatFormatting.AQUA));
         return Command.SINGLE_SUCCESS;
+    }
+
+    private static int setSlimeChunks(ServerPlayer player, boolean enabled) {
+        SlimeFormConfig config = SlimeFormConfig.get();
+        config.slimeChunksEnabled = enabled;
+        AutoConfig.getConfigHolder(SlimeFormConfig.class).save();
+        SlimeFormPayloads.SlimeChunksStatePayload payload = currentSlimeChunksState(
+                ((ServerLevel) player.level()).getServer());
+        lastSlimeChunksState = payload;
+        for (ServerPlayer onlinePlayer : ((ServerLevel) player.level()).getServer().getPlayerList().getPlayers()) {
+            ServerPlayNetworking.send(onlinePlayer, payload);
+        }
+        player.sendSystemMessage(Component.literal(String.format(
+                java.util.Locale.ROOT,
+                "SlimeForm experimental slime-chunk aura %s.",
+                enabled ? "enabled" : "disabled")).withStyle(ChatFormatting.AQUA));
+        return Command.SINGLE_SUCCESS;
+    }
+
+    private static SlimeFormPayloads.SlimeChunksStatePayload currentSlimeChunksState(MinecraftServer server) {
+        List<SlimeFormPayloads.AuraSource> sources = new ArrayList<>();
+        ServerLevel overworld = server.getLevel(Level.OVERWORLD);
+        if (overworld != null && SlimeFormConfig.get().slimeChunksEnabled) {
+            for (ServerPlayer player : overworld.players()) {
+                if (SlimeFormState.isActive(player) && !isDormant(player)) {
+                    sources.add(new SlimeFormPayloads.AuraSource(
+                            player.blockPosition().getX() >> 4,
+                            player.blockPosition().getZ() >> 4));
+                }
+            }
+        }
+        return new SlimeFormPayloads.SlimeChunksStatePayload(
+                SlimeFormConfig.get().slimeChunksEnabled, sources);
+    }
+
+    private static void tickSlimeChunksState(MinecraftServer server) {
+        SlimeFormPayloads.SlimeChunksStatePayload state = currentSlimeChunksState(server);
+        if (state.equals(lastSlimeChunksState)) {
+            return;
+        }
+        lastSlimeChunksState = state;
+        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+            ServerPlayNetworking.send(player, state);
+        }
+    }
+
+    public static boolean isSlimeChunkAuraActive(LevelAccessor level, BlockPos pos) {
+        if (!SlimeFormConfig.get().slimeChunksEnabled
+                || !(level instanceof ServerLevel serverLevel)
+                || !serverLevel.dimension().equals(Level.OVERWORLD)) {
+            return false;
+        }
+
+        int chunkX = pos.getX() >> 4;
+        int chunkZ = pos.getZ() >> 4;
+        for (ServerPlayer player : serverLevel.getServer().getPlayerList().getPlayers()) {
+            if (player.level() != serverLevel
+                    || !SlimeFormState.isActive(player)
+                    || isDormant(player)) {
+                continue;
+            }
+            int playerChunkX = player.blockPosition().getX() >> 4;
+            int playerChunkZ = player.blockPosition().getZ() >> 4;
+            if (Math.abs(chunkX - playerChunkX) <= 8
+                    && Math.abs(chunkZ - playerChunkZ) <= 8) {
+                return true;
+            }
+        }
+        return false;
     }
 
 

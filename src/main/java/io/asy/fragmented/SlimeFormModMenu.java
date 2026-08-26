@@ -141,6 +141,11 @@ public class SlimeFormModMenu implements ModMenuApi {
                 Component.translatable("config.slimeform.category.experimental"));
         addToggle(experimental, entries, "do_phase_enabled", config.doPhaseEnabled,
                 value -> config.doPhaseEnabled = value);
+        addToggle(experimental, entries, "slime_chunks_enabled", config.slimeChunksEnabled,
+                value -> config.slimeChunksEnabled = value);
+        addIntSlider(experimental, entries, "slime_chunk_chance", config.slimeChunkChance,
+                SlimeFormConfig.MIN_SLIME_CHUNK_CHANCE, SlimeFormConfig.MAX_SLIME_CHUNK_CHANCE,
+                value -> config.slimeChunkChance = value, 30);
         addToggle(experimental, entries, "slime_morph_enabled", config.slimeMorphEnabled,
                 value -> config.slimeMorphEnabled = value);
         addToggle(experimental, entries, "slime_morph_auto_jump", config.slimeMorphAutoJump,

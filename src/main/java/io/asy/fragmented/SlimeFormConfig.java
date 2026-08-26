@@ -21,6 +21,8 @@ public class SlimeFormConfig implements me.shedaniel.autoconfig.ConfigData {
     public static final int MAX_PASSIVE_SPAWN_COOLDOWN_SECONDS = 600;
     public static final int MIN_MAX_NEARBY_SPAWNED_SLIMES = 0;
     public static final int MAX_MAX_NEARBY_SPAWNED_SLIMES = 16;
+    public static final int MIN_SLIME_CHUNK_CHANCE = 0;
+    public static final int MAX_SLIME_CHUNK_CHANCE = 100;
     public static final int MIN_AFK_INACTIVITY_SECONDS = 30;
     public static final int MAX_AFK_INACTIVITY_SECONDS = 3600;
     public static final double MIN_RIDER_OFFSET = -4.0D;
@@ -114,6 +116,13 @@ public class SlimeFormConfig implements me.shedaniel.autoconfig.ConfigData {
     public boolean doPhaseEnabled = false;
 
     @ConfigEntry.Gui.Tooltip
+    public boolean slimeChunksEnabled = false;
+
+    @ConfigEntry.Gui.Tooltip
+    @ConfigEntry.BoundedDiscrete(min = MIN_SLIME_CHUNK_CHANCE, max = MAX_SLIME_CHUNK_CHANCE)
+    public int slimeChunkChance = 30;
+
+    @ConfigEntry.Gui.Tooltip
     public boolean slimeMorphEnabled = false;
 
     @ConfigEntry.Gui.Tooltip
@@ -179,6 +188,10 @@ public class SlimeFormConfig implements me.shedaniel.autoconfig.ConfigData {
                 maxNearbySpawnedSlimes,
                 MIN_MAX_NEARBY_SPAWNED_SLIMES,
                 MAX_MAX_NEARBY_SPAWNED_SLIMES);
+    }
+
+    public int effectiveSlimeChunkChance() {
+        return clamp(slimeChunkChance, MIN_SLIME_CHUNK_CHANCE, MAX_SLIME_CHUNK_CHANCE);
     }
 
     public int effectiveAfkInactivitySeconds() {

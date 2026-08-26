@@ -6,6 +6,9 @@ import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.Identifier;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public final class SlimeFormPayloads {
     public static final CustomPacketPayload.Type<WakeDormantPayload> WAKE_DORMANT_TYPE =
             new CustomPacketPayload.Type<>(Identifier.fromNamespaceAndPath(
@@ -17,6 +20,20 @@ public final class SlimeFormPayloads {
                     SlimeFormMod.MOD_ID, "phase_state"));
     public static final StreamCodec<ByteBuf, PhaseStatePayload> PHASE_STATE_CODEC =
             ByteBufCodecs.BOOL.map(PhaseStatePayload::new, PhaseStatePayload::enabled);
+    public static final CustomPacketPayload.Type<SlimeChunksStatePayload> SLIME_CHUNKS_STATE_TYPE =
+            new CustomPacketPayload.Type<>(Identifier.fromNamespaceAndPath(
+                    SlimeFormMod.MOD_ID, "slime_chunks_state"));
+    public static final StreamCodec<ByteBuf, AuraSource> AURA_SOURCE_CODEC =
+            StreamCodec.composite(
+                    ByteBufCodecs.VAR_INT, AuraSource::chunkX,
+                    ByteBufCodecs.VAR_INT, AuraSource::chunkZ,
+                    AuraSource::new);
+    public static final StreamCodec<ByteBuf, SlimeChunksStatePayload> SLIME_CHUNKS_STATE_CODEC =
+            StreamCodec.composite(
+                    ByteBufCodecs.BOOL, SlimeChunksStatePayload::enabled,
+                    ByteBufCodecs.collection(ArrayList::new, AURA_SOURCE_CODEC),
+                    SlimeChunksStatePayload::sources,
+                    SlimeChunksStatePayload::new);
     public static final CustomPacketPayload.Type<DormantDebugPayload> DORMANT_DEBUG_TYPE =
             new CustomPacketPayload.Type<>(Identifier.fromNamespaceAndPath(
                     SlimeFormMod.MOD_ID, "dormant_debug"));
@@ -64,6 +81,17 @@ public final class SlimeFormPayloads {
         @Override
         public Type<? extends CustomPacketPayload> type() {
             return PHASE_STATE_TYPE;
+        }
+    }
+
+    public record AuraSource(int chunkX, int chunkZ) {
+    }
+
+    public record SlimeChunksStatePayload(boolean enabled, List<AuraSource> sources)
+            implements CustomPacketPayload {
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return SLIME_CHUNKS_STATE_TYPE;
         }
     }
 
