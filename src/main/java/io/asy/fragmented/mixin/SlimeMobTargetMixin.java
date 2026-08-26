@@ -1,10 +1,11 @@
 package io.asy.fragmented.mixin;
 
 import io.asy.fragmented.SlimeFormMod;
-import io.asy.fragmented.FlowStateManager;
+import io.asy.fragmented.MagmaCubeRetaliationAccess;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.monster.Slime;
+import net.minecraft.world.entity.monster.MagmaCube;
 import net.minecraft.world.entity.player.Player;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
@@ -23,10 +24,7 @@ public abstract class SlimeMobTargetMixin {
     private void slimeform$rejectSlimeFormPlayer(LivingEntity target, CallbackInfo ci) {
         if ((Object) this instanceof Mob mob
                 && target instanceof Player player
-                && (player.getTags().contains(SlimeFormMod.SLIME_DORMANT_TAG)
-                || FlowStateManager.isPossessed(player)
-                || (mob instanceof Slime
-                && player.getTags().contains(SlimeFormMod.SLIME_FORM_TAG)))) {
+                && slimeform$isProtectedTarget(mob, player)) {
             if (!player.getUUID().equals(slimeform$lastRejectedTarget)) {
                 slimeform$lastRejectedTarget = player.getUUID();
                 SlimeFormMod.LOGGER.warn(
@@ -42,10 +40,7 @@ public abstract class SlimeMobTargetMixin {
     private void slimeform$clearExistingSlimeFormPlayerTarget(CallbackInfo ci) {
         Mob mob = (Mob) (Object) this;
         if (mob.getTarget() instanceof Player player
-                && (player.getTags().contains(SlimeFormMod.SLIME_DORMANT_TAG)
-                || FlowStateManager.isPossessed(player)
-                || (mob instanceof Slime
-                && player.getTags().contains(SlimeFormMod.SLIME_FORM_TAG)))) {
+                && slimeform$isProtectedTarget(mob, player)) {
             if (!player.getUUID().equals(slimeform$lastRejectedTarget)) {
                 slimeform$lastRejectedTarget = player.getUUID();
                 SlimeFormMod.LOGGER.warn(
@@ -54,5 +49,17 @@ public abstract class SlimeMobTargetMixin {
             }
             mob.setTarget(null);
         }
+    }
+
+    @Unique
+    private boolean slimeform$isProtectedTarget(Mob mob, Player player) {
+        if (player.getTags().contains(SlimeFormMod.SLIME_DORMANT_TAG)) {
+            return true;
+        }
+        if (!(mob instanceof Slime) || !player.getTags().contains(SlimeFormMod.SLIME_FORM_TAG)) {
+            return false;
+        }
+        return !(mob instanceof MagmaCube magmaCube)
+                || !((MagmaCubeRetaliationAccess) magmaCube).slimeform$isRetaliatingAgainst(player);
     }
 }

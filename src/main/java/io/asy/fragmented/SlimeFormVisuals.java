@@ -89,11 +89,13 @@ public final class SlimeFormVisuals {
     }
 
     public static void tick(ServerPlayer player) {
-        boolean sleeping = SlimeFormState.isActive(player) && player.isSleeping();
+        SlimeFormConfig config = SlimeFormConfig.get();
+        boolean active = SlimeFormState.isActive(player);
+        boolean sleeping = active && player.isSleeping();
         boolean dormant = player.getTags().contains(SlimeFormMod.SLIME_DORMANT_TAG);
-        if (SlimeFormState.isActive(player) && !sleeping && !dormant) {
+        if (active && !sleeping && !dormant) {
             tickAmbientParticles(player);
-        } else if (!SlimeFormState.isActive(player)) {
+        } else if (!active) {
             AMBIENT_PARTICLE_TICKS.remove(player.getUUID());
         }
         if (sleeping || dormant) {
@@ -119,7 +121,7 @@ public final class SlimeFormVisuals {
                 } else if (player.getVehicle() != slime && !player.isPassenger()) {
                     player.startRiding(slime, true, true);
                 }
-                if (!SlimeFormConfig.get().floatingItemDisplays) {
+                if (!config.floatingItemDisplays) {
                     removeItemDisplays(player);
                 } else {
                     ItemDisplaySession session = ITEM_DISPLAY_SESSIONS.get(player.getUUID());
@@ -283,6 +285,9 @@ public final class SlimeFormVisuals {
         }
         slime.setSize(1, false);
         slime.addTag(tag);
+        if (dormant) {
+            slime.addTag(SlimeFormMod.PLAYER_DORMANT_SLIME_TAG);
+        }
         slime.setInvulnerable(true);
         slime.setNoAi(!dormant);
         slime.setNoGravity(!dormant);

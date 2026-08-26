@@ -2,6 +2,7 @@ package io.asy.fragmented;
 
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
@@ -13,8 +14,21 @@ public final class SlimeFormState {
     private static final String SIZE_PREFIX = "slimeform.size.";
     private static final Identifier HEALTH_MODIFIER_ID =
             Identifier.fromNamespaceAndPath(SlimeFormMod.MOD_ID, "slime_form_health");
+    private static volatile boolean clientPhaseEnabled;
 
     private SlimeFormState() {
+    }
+
+    public static boolean isPhaseEnabled(Player player) {
+        return isPhaseEnabled((Entity) player);
+    }
+
+    public static boolean isPhaseEnabled(Entity entity) {
+        return entity.level().isClientSide() ? clientPhaseEnabled : SlimeFormConfig.get().doPhaseEnabled;
+    }
+
+    public static void setClientPhaseEnabled(boolean enabled) {
+        clientPhaseEnabled = enabled;
     }
 
     public static boolean isActive(Player player) {

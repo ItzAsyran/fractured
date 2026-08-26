@@ -26,9 +26,6 @@ public abstract class SlimeMountMixin {
             if (player.level().isClientSide()) {
                 cir.setReturnValue(InteractionResult.SUCCESS);
             } else if (player.startRiding(slime, true, true)) {
-                SlimeFormMod.LOGGER.info(
-                        "[slimeform] Player {} mounted slime {}",
-                        player.getUUID(), slime.getUUID());
                 cir.setReturnValue(InteractionResult.SUCCESS_SERVER);
             } else {
                 SlimeFormMod.LOGGER.warn(

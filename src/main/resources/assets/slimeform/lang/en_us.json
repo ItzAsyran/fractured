@@ -6,6 +6,8 @@
   "config.slimeform.category.experimental": "Experimental",
   "config.slimeform.max_slime_size": "Maximum Slime Size",
   "config.slimeform.max_slime_size.tooltip": "The largest slime size the player can reach. Values range from 1 to 10.",
+  "config.slimeform.auto_activate": "Automatically Activate SlimeForm",
+  "config.slimeform.auto_activate.tooltip": "Automatically activate SlimeForm when players join or respawn.",
   "config.slimeform.slime_balls_required": "Slime Balls Required",
   "config.slimeform.slime_balls_required.tooltip": "The number of slime balls required for one size increase.",
   "config.slimeform.rider_offset_x": "Rider Offset X per Size",
@@ -41,6 +43,8 @@
   "config.slimeform.afk_enabled.tooltip": "Transform inactive SlimeForm players into a protected dormant slime.",
   "config.slimeform.afk_debug": "AFK Dormant Countdown Debug",
   "config.slimeform.afk_debug.tooltip": "Show the server-authoritative countdown to dormant mode above the hotbar.",
+  "config.slimeform.afk_hud_debug": "AFK Dormant HUD Debug",
+  "config.slimeform.afk_hud_debug.tooltip": "Show a custom bottom-left slider during the final 10 seconds before dormant mode.",
   "config.slimeform.afk_duration": "AFK Inactivity Duration (Seconds)",
   "config.slimeform.afk_duration.tooltip": "How long a SlimeForm player must remain inactive before becoming dormant. Dangerous or combat situations prevent activation.",
   "config.slimeform.category.water": "Water Behavior",
@@ -74,15 +78,14 @@
   ,"config.slimeform.visuals.off_hand_offset": "Off-Hand Offset"
   ,"config.slimeform.visuals.transform": "Item Transform"
   ,"config.slimeform.visuals.animation": "Item Animation"
-  ,"config.slimeform.experimental.flow_state": "Flow State"
-  ,"config.slimeform.flow_state_enabled": "Enable Flow State"
-  ,"config.slimeform.flow_state_enabled.tooltip": "Allow players to possess a controllable slime."
-  ,"config.slimeform.flow_state_debug": "Flow State Debug Logging"
-  ,"config.slimeform.flow_state_debug.tooltip": "Temporarily log Flow State input and transformation state transitions."
-  ,"config.slimeform.flow_state_auto_jump": "Automatic Jumping"
-  ,"config.slimeform.flow_state_auto_jump.tooltip": "Make the controlled slime jump automatically while moving."
-  ,"config.slimeform.flow_state_transform_seconds": "Transformation Hold (Seconds)"
-  ,"config.slimeform.flow_state_transform_seconds.tooltip": "How long the second crouch hold takes to transform."
-  ,"config.slimeform.flow_state_exit_seconds": "Exit Hold (Seconds)"
-  ,"config.slimeform.flow_state_exit_seconds.tooltip": "How long Jump must be held to return to player form."
+  ,"config.slimeform.do_phase_enabled": "Experimental Block Phasing"
+  ,"config.slimeform.do_phase_enabled.tooltip": "Allow active SlimeForm players to phase through blocks tagged as waterloggable."
+  ,"config.slimeform.slime_morph_enabled": "Experimental Slime Morphing"
+  ,"config.slimeform.slime_morph_enabled.tooltip": "Allow active SlimeForm players to become controllable slimes by holding crouch."
+  ,"config.slimeform.slime_morph_auto_jump": "Slime Morph Automatic Jump"
+  ,"config.slimeform.slime_morph_auto_jump.tooltip": "Make the controlled slime hop automatically while moving."
+  ,"config.slimeform.slime_morph_transform_seconds": "Morph Duration (Seconds)"
+  ,"config.slimeform.slime_morph_transform_seconds.tooltip": "How long crouch must be held to become a slime."
+  ,"config.slimeform.slime_morph_exit_seconds": "Return Duration (Seconds)"
+  ,"config.slimeform.slime_morph_exit_seconds.tooltip": "How long crouch must be held to return from slime form."
 }

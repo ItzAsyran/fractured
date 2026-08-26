@@ -12,6 +12,7 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.storage.ValueInput;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -29,6 +30,17 @@ public abstract class SlimeFormPlayerMixin {
             CallbackInfoReturnable<Boolean> cir) {
         if ((Object) this instanceof Player player && SlimeFormMod.isDormant(player)) {
             cir.setReturnValue(false);
+        }
+    }
+
+    @Inject(
+            method = "readAdditionalSaveData",
+            at = @At(
+                    value = "INVOKE",
+                    target = "Lnet/minecraft/world/entity/LivingEntity;setHealth(F)V"))
+    private void slimeform$restoreMaxHealthOnLoad(ValueInput input, CallbackInfo ci) {
+        if ((Object) this instanceof Player player && SlimeFormState.isActive(player)) {
+            SlimeFormState.applyHealth(player, false);
         }
     }
 

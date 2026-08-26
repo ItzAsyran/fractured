@@ -1,6 +1,7 @@
 package io.asy.fragmented.mixin;
 
 import io.asy.fragmented.SlimeRecoveryLineage;
+import io.asy.fragmented.SlimeFormMod;
 import net.minecraft.world.entity.monster.Slime;
 import net.minecraft.world.level.storage.ValueInput;
 import net.minecraft.world.level.storage.ValueOutput;
@@ -69,6 +70,7 @@ public abstract class SlimeRecoveryLineageMixin implements SlimeRecoveryLineage 
                 lineage,
                 parentId,
                 input.getIntOr("SlimeFormRecoveryGeneration", 0));
+        ((Slime) (Object) this).addTag(SlimeFormMod.PLAYER_RECOVERY_SLIME_TAG);
     }
 
     @Unique

@@ -27,6 +27,8 @@ public class SlimeFormModMenu implements ModMenuApi {
 
         ConfigCategory slimeForm = builder.getOrCreateCategory(
                 Component.translatable("config.slimeform.category.slime_form"));
+        addToggle(slimeForm, entries, "auto_activate", config.autoActivateSlimeForm,
+                value -> config.autoActivateSlimeForm = value);
         slimeForm.addEntry(entries.startIntSlider(
                         Component.translatable("config.slimeform.max_slime_size"), config.maxSlimeSize,
                         SlimeFormConfig.MIN_MAX_SLIME_SIZE, SlimeFormConfig.MAX_MAX_SLIME_SIZE)
@@ -85,6 +87,8 @@ public class SlimeFormModMenu implements ModMenuApi {
                 value -> config.afkInactivitySeconds = value, 300);
         addToggle(activity, entries, "afk_debug", config.afkDormantDebug,
                 value -> config.afkDormantDebug = value);
+        addToggle(activity, entries, "afk_hud_debug", config.afkDormantHudDebug,
+                value -> config.afkDormantHudDebug = value);
         addToggle(activity, entries, "water_behavior", config.slimeWaterBehavior,
                 value -> config.slimeWaterBehavior = value);
 
@@ -135,19 +139,18 @@ public class SlimeFormModMenu implements ModMenuApi {
 
         ConfigCategory experimental = builder.getOrCreateCategory(
                 Component.translatable("config.slimeform.category.experimental"));
-        SubCategoryBuilder flowState = entries.startSubCategory(
-                Component.translatable("config.slimeform.experimental.flow_state"));
-            addToggle(flowState, entries, "flow_state_enabled", config.flowStateEnabled,
-                    value -> config.flowStateEnabled = value);
-            addToggle(flowState, entries, "flow_state_debug", config.flowStateDebug,
-                    value -> config.flowStateDebug = value);
-            addToggle(flowState, entries, "flow_state_auto_jump", config.flowStateAutoJump,
-                value -> config.flowStateAutoJump = value);
-        addIntSlider(flowState, entries, "flow_state_transform_seconds", config.flowStateTransformSeconds,
-                1, 10, value -> config.flowStateTransformSeconds = value, 2);
-        addIntSlider(flowState, entries, "flow_state_exit_seconds", config.flowStateExitSeconds,
-                1, 15, value -> config.flowStateExitSeconds = value, 5);
-        experimental.addEntry(flowState.setExpanded(true).build());
+        addToggle(experimental, entries, "do_phase_enabled", config.doPhaseEnabled,
+                value -> config.doPhaseEnabled = value);
+        addToggle(experimental, entries, "slime_morph_enabled", config.slimeMorphEnabled,
+                value -> config.slimeMorphEnabled = value);
+        addToggle(experimental, entries, "slime_morph_auto_jump", config.slimeMorphAutoJump,
+                value -> config.slimeMorphAutoJump = value);
+        addIntSlider(experimental, entries, "slime_morph_transform_seconds",
+                config.slimeMorphTransformSeconds, 1, 10,
+                value -> config.slimeMorphTransformSeconds = value, 2);
+        addIntSlider(experimental, entries, "slime_morph_exit_seconds",
+                config.slimeMorphExitSeconds, 1, 15,
+                value -> config.slimeMorphExitSeconds = value, 5);
 
         return builder.build();
     }

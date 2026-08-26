@@ -1,6 +1,7 @@
 package io.asy.fragmented;
 
 import com.mojang.brigadier.Command;
+import com.mojang.brigadier.arguments.BoolArgumentType;
 import com.mojang.brigadier.arguments.DoubleArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import me.shedaniel.autoconfig.AutoConfig;
@@ -34,6 +35,7 @@ import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.MobCategory;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.monster.Slime;
+import net.minecraft.world.entity.monster.MagmaCube;
 import net.minecraft.world.entity.monster.Enemy;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.BossEvent;
@@ -66,9 +68,12 @@ public class SlimeFormMod implements ModInitializer {
     public static final String MOD_ID = "slimeform";
     public static final String SLIME_FORM_TAG = "slimeform.active";
     public static final String SLIME_DORMANT_TAG = "slimeform.dormant";
+    public static final String PLAYER_RECOVERY_SLIME_TAG = "slimeform.player_recovery";
+    public static final String PLAYER_DORMANT_SLIME_TAG = "slimeform.player_dormant";
     public static final int RECOVERY_COUNTDOWN_INTERVAL_TICKS = 20;
     private static final int SIZE_ONE_RECOVERY_MAX_TICKS = 3 * 60 * RECOVERY_COUNTDOWN_INTERVAL_TICKS;
     public static final int RECOVERY_PROGRESS_BAR_WIDTH = 20;
+    private static final int DORMANT_HUD_LEAD_SECONDS = 10;
     public static final int REFORM_PARTICLE_COUNT = 40;
     /** Runtime-tunable independent offsets relative to each safe-zone anchor. */
     public static double ITEM_MAIN_HAND_OFFSET_X = 0.0D;
@@ -190,30 +195,43 @@ public class SlimeFormMod implements ModInitializer {
         PayloadTypeRegistry.playC2S().register(
                 SlimeFormPayloads.WAKE_DORMANT_TYPE,
                 SlimeFormPayloads.WAKE_DORMANT_CODEC);
-        PayloadTypeRegistry.playC2S().register(
-                SlimeFormPayloads.FLOW_STATE_INPUT_TYPE,
-                SlimeFormPayloads.FLOW_STATE_INPUT_CODEC);
         PayloadTypeRegistry.playS2C().register(
-                SlimeFormPayloads.FLOW_STATE_CAMERA_TYPE,
-                SlimeFormPayloads.FLOW_STATE_CAMERA_CODEC);
+                SlimeFormPayloads.PHASE_STATE_TYPE,
+                SlimeFormPayloads.PHASE_STATE_CODEC);
+        PayloadTypeRegistry.playS2C().register(
+                SlimeFormPayloads.DORMANT_DEBUG_TYPE,
+                SlimeFormPayloads.DORMANT_DEBUG_CODEC);
+        PayloadTypeRegistry.playC2S().register(
+                SlimeFormPayloads.MORPH_INPUT_TYPE,
+                SlimeFormPayloads.MORPH_INPUT_CODEC);
+        PayloadTypeRegistry.playS2C().register(
+                SlimeFormPayloads.MORPH_STATE_TYPE,
+                SlimeFormPayloads.MORPH_STATE_CODEC);
         ServerPlayNetworking.registerGlobalReceiver(
                 SlimeFormPayloads.WAKE_DORMANT_TYPE,
                 (payload, context) -> wakeDormant(context.player()));
         ServerPlayNetworking.registerGlobalReceiver(
-                SlimeFormPayloads.FLOW_STATE_INPUT_TYPE,
-                (payload, context) -> FlowStateManager.handleInput(context.player(), payload));
+                SlimeFormPayloads.MORPH_INPUT_TYPE,
+                (payload, context) -> SlimeMorphManager.handleInput(context.player(), payload));
         LOGGER.info("Sliming.");
 
         ServerTickEvents.END_SERVER_TICK.register(server -> {
             tickRecoveries(server);
             tickPassiveSlimeSpawning(server);
             tickDormantPlayers(server);
-            FlowStateManager.tick(server);
+            SlimeMorphManager.tick(server);
             SlimeFormVisuals.processPendingRemovals(server);
         });
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
             ServerPlayer player = handler.getPlayer();
+            if (SlimeFormConfig.get().autoActivateSlimeForm && !SlimeFormState.isActive(player)) {
+                SlimeFormState.activate(player);
+                player.sendSystemMessage(Component.literal("Slime form automatically activated.")
+                        .withStyle(ChatFormatting.GREEN));
+            }
             SlimeFormState.applyHealth(player, false);
+            ServerPlayNetworking.send(player,
+                    new SlimeFormPayloads.PhaseStatePayload(SlimeFormConfig.get().doPhaseEnabled));
             ACTIVITY_TICKS.put(player.getUUID(), player.level().getGameTime());
             ACTIVITY_POSITIONS.put(player.getUUID(), player.position());
             LOGGER.info("[slimeform] Joined {}: active={}, size={}, maxHealth={}, health={}",
@@ -225,7 +243,7 @@ public class SlimeFormMod implements ModInitializer {
         });
         ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> {
             ServerPlayer player = handler.getPlayer();
-            FlowStateManager.stop(player, false);
+            SlimeMorphManager.stop(player);
             clearCalibrationFor(player);
             wakeDormant(player);
             SlimeFormVisuals.remove(player, false);
@@ -233,6 +251,8 @@ public class SlimeFormMod implements ModInitializer {
             ACTIVITY_TICKS.remove(player.getUUID());
             COMBAT_TICKS.remove(player.getUUID());
             ACTIVITY_POSITIONS.remove(player.getUUID());
+            DORMANT_PREVIOUS_INVISIBILITY.remove(player.getUUID());
+            PASSIVE_SPAWN_NEXT_ATTEMPT.remove(player.getUUID());
         });
 
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) ->
@@ -260,6 +280,12 @@ public class SlimeFormMod implements ModInitializer {
                                 .then(Commands.literal("status")
                                         .executes(context -> showCalibrationStatus(
                                                 context.getSource().getPlayerOrException()))))
+                        .then(Commands.literal("experimental")
+                                .then(Commands.literal("doPhase")
+                                        .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                                .executes(context -> setDoPhase(
+                                                        context.getSource().getPlayerOrException(),
+                                                        BoolArgumentType.getBool(context, "enabled"))))))
                         .then(Commands.literal("itemdebug")
                                 .then(itemDebugHandCommands("mainhand"))
                                 .then(itemDebugHandCommands("offhand"))
@@ -571,6 +597,22 @@ public class SlimeFormMod implements ModInitializer {
         return Command.SINGLE_SUCCESS;
     }
 
+    private static int setDoPhase(ServerPlayer player, boolean enabled) {
+        SlimeFormConfig config = SlimeFormConfig.get();
+        config.doPhaseEnabled = enabled;
+        AutoConfig.getConfigHolder(SlimeFormConfig.class).save();
+        SlimeFormPayloads.PhaseStatePayload payload =
+                new SlimeFormPayloads.PhaseStatePayload(enabled);
+        for (ServerPlayer onlinePlayer : ((ServerLevel) player.level()).getServer().getPlayerList().getPlayers()) {
+            ServerPlayNetworking.send(onlinePlayer, payload);
+        }
+        player.sendSystemMessage(Component.literal(String.format(
+                java.util.Locale.ROOT,
+                "SlimeForm experimental block phasing %s.",
+                enabled ? "enabled" : "disabled")).withStyle(ChatFormatting.AQUA));
+        return Command.SINGLE_SUCCESS;
+    }
+
 
     private static int setItemDebugRotation(ServerPlayer player, char axis, double value) {
         SlimeFormConfig config = SlimeFormConfig.get();
@@ -607,7 +649,7 @@ public class SlimeFormMod implements ModInitializer {
     }
 
     private static int deactivateSlimeForm(ServerPlayer player) {
-        FlowStateManager.stop(player, true);
+        SlimeMorphManager.stop(player);
         wakeDormant(player);
         SlimeFormState.deactivate(player);
         LOGGER.info("[slimeform] Deactivated slime form for {} ({})", player.getName().getString(), player.getUUID());
@@ -654,8 +696,13 @@ public class SlimeFormMod implements ModInitializer {
     }
 
     private static void tickDormantPlayers(MinecraftServer server) {
+        // Config is global for the server; read it once instead of once per player.
+        SlimeFormConfig config = SlimeFormConfig.get();
         for (ServerPlayer player : server.getPlayerList().getPlayers()) {
             if (!SlimeFormState.isActive(player)) {
+                if (player.level().getGameTime() % 20L == 0L) {
+                    sendDormantDebug(player, false, 0);
+                }
                 wakeDormant(player);
                 SlimeFormVisuals.tick(player);
                 continue;
@@ -664,6 +711,9 @@ public class SlimeFormMod implements ModInitializer {
             long now = player.level().getGameTime();
             long last = ACTIVITY_TICKS.computeIfAbsent(player.getUUID(), ignored -> now);
             if (isDormant(player)) {
+                if (player.level().getGameTime() % 20L == 0L) {
+                    sendDormantDebug(player, false, 0);
+                }
                 player.setInvisible(true);
                 if (now % 20L == 0L) {
                     player.displayClientMessage(
@@ -681,7 +731,6 @@ public class SlimeFormMod implements ModInitializer {
                 ACTIVITY_POSITIONS.put(player.getUUID(), player.position());
                 last = now;
             }
-            SlimeFormConfig config = SlimeFormConfig.get();
             long inactivityLimit = config.effectiveAfkInactivitySeconds() * 20L;
             if (config.afkDormantEnabled
                     && config.afkDormantDebug
@@ -693,6 +742,15 @@ public class SlimeFormMod implements ModInitializer {
                                 .append(Component.literal(secondsRemaining + "s")
                                         .withStyle(ChatFormatting.YELLOW)),
                         true);
+            }
+            if (now % 20L == 0L) {
+                boolean showHudTimer = config.afkDormantEnabled
+                        && config.afkDormantHudDebug
+                        && now - last < inactivityLimit
+                        && inactivityLimit - (now - last) <= DORMANT_HUD_LEAD_SECONDS * 20L;
+                int hudRemainingTicks = showHudTimer
+                        ? (int) Math.max(0L, inactivityLimit - (now - last)) : 0;
+                sendDormantDebug(player, showHudTimer, hudRemainingTicks);
             }
             if (config.afkDormantEnabled && now - last >= inactivityLimit) {
                 String blockReason = dormantEntryBlockReason(player, now);
@@ -707,6 +765,11 @@ public class SlimeFormMod implements ModInitializer {
             }
             SlimeFormVisuals.tick(player);
         }
+    }
+
+    private static void sendDormantDebug(ServerPlayer player, boolean visible, int secondsRemaining) {
+        ServerPlayNetworking.send(player,
+                new SlimeFormPayloads.DormantDebugPayload(visible, secondsRemaining));
     }
 
     private static void enterDormant(ServerPlayer player) {
@@ -816,6 +879,7 @@ public class SlimeFormMod implements ModInitializer {
 
     public static void assignRecoveryLineage(
             Slime slime, String lineageId, UUID parentId, int generation) {
+        slime.addTag(PLAYER_RECOVERY_SLIME_TAG);
         ((SlimeRecoveryLineage) slime).slimeform$setRecoveryLineage(lineageId, parentId, generation);
         trackRecoveryLineageEntity(slime);
         LOGGER.info(
@@ -838,6 +902,12 @@ public class SlimeFormMod implements ModInitializer {
                 parent.getUUID(),
                 getRecoveryGeneration(parent) + 1);
         return true;
+    }
+
+    public static boolean isPlayerOriginSlime(Slime slime) {
+        return slime.getTags().contains(PLAYER_RECOVERY_SLIME_TAG)
+                || slime.getTags().contains(PLAYER_DORMANT_SLIME_TAG)
+                || hasRecoveryLineage(slime);
     }
 
     public static void trackRecoveryLineageEntity(Slime slime) {
@@ -2046,7 +2116,7 @@ public class SlimeFormMod implements ModInitializer {
         if (player.level().isClientSide()
                 || !SlimeFormState.isActive(player)
                 || target instanceof Player
-                || target instanceof Slime
+                || (target instanceof Slime && !(target instanceof MagmaCube))
                 || !target.isAlive()) {
             return 0;
         }
@@ -2058,13 +2128,6 @@ public class SlimeFormMod implements ModInitializer {
                 slime.setTarget(target);
                 commanded++;
             }
-        }
-        if (commanded > 0) {
-            LOGGER.info("[slimeform] {} commanded {} allied slimes to attack {} ({})",
-                    player.getName().getString(),
-                    commanded,
-                    target.getName().getString(),
-                    target.getUUID());
         }
         return commanded;
     }

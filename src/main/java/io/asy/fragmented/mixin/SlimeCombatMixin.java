@@ -1,8 +1,10 @@
 package io.asy.fragmented.mixin;
 
 import io.asy.fragmented.SlimeFormMod;
+import io.asy.fragmented.MagmaCubeRetaliationAccess;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.monster.Slime;
+import net.minecraft.world.entity.monster.MagmaCube;
 import net.minecraft.world.entity.player.Player;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -24,7 +26,9 @@ public abstract class SlimeCombatMixin {
 
     @Inject(method = "playerTouch", at = @At("HEAD"), cancellable = true)
     private void slimeform$doNotDamageActivatedPlayer(Player player, CallbackInfo ci) {
-        if (player.getTags().contains(SlimeFormMod.SLIME_FORM_TAG)) {
+        if (player.getTags().contains(SlimeFormMod.SLIME_FORM_TAG)
+                && (!((Object) this instanceof MagmaCube magmaCube)
+                || !((MagmaCubeRetaliationAccess) magmaCube).slimeform$isRetaliatingAgainst(player))) {
             ci.cancel();
         }
     }

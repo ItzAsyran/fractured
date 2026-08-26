@@ -1,8 +1,8 @@
 package io.asy.fragmented.mixin;
 
 import io.asy.fragmented.SlimeFormMod;
+import io.asy.fragmented.SlimeFormConfig;
 import io.asy.fragmented.SlimeFormState;
-import io.asy.fragmented.FlowStateManager;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.damagesource.DamageSource;
@@ -50,7 +50,6 @@ public abstract class SlimePlayerLifecycleMixin {
     @Inject(method = "die", at = @At("HEAD"))
     private void slimeform$splitOnDeath(DamageSource source, CallbackInfo ci) {
         ServerPlayer player = (ServerPlayer) (Object) this;
-        FlowStateManager.stop(player, false);
         if (slimeform$deathHandled || !SlimeFormState.isActive(player)) {
             return;
         }
@@ -104,11 +103,13 @@ public abstract class SlimePlayerLifecycleMixin {
     @Inject(method = "restoreFrom", at = @At("TAIL"))
     private void slimeform$restoreState(ServerPlayer oldPlayer, boolean alive, CallbackInfo ci) {
         ServerPlayer player = (ServerPlayer) (Object) this;
-        if (SlimeFormState.isActive(oldPlayer)) {
+        if (SlimeFormState.isActive(oldPlayer)
+                || SlimeFormConfig.get().autoActivateSlimeForm) {
             player.addTag(SlimeFormMod.SLIME_FORM_TAG);
-            int restoredSize = SlimeFormState.getSize(oldPlayer) <= SlimeFormState.MIN_SIZE
-                    ? SlimeFormState.getMaxSize()
-                    : SlimeFormState.getSize(oldPlayer);
+            int restoredSize = SlimeFormState.isActive(oldPlayer)
+                    && SlimeFormState.getSize(oldPlayer) > SlimeFormState.MIN_SIZE
+                    ? SlimeFormState.getSize(oldPlayer)
+                    : SlimeFormState.getMaxSize();
             SlimeFormState.setSize(player, restoredSize);
             SlimeFormState.applyHealth(player, true);
         } else {

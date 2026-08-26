@@ -38,6 +38,9 @@ public class SlimeFormConfig implements me.shedaniel.autoconfig.ConfigData {
     public int maxSlimeSize = 5;
 
     @ConfigEntry.Gui.Tooltip
+    public boolean autoActivateSlimeForm = false;
+
+    @ConfigEntry.Gui.Tooltip
     @ConfigEntry.BoundedDiscrete(min = MIN_SPLIT_DURATION_SECONDS, max = MAX_SPLIT_DURATION_SECONDS)
     public int splitDurationSeconds = 30;
 
@@ -90,6 +93,9 @@ public class SlimeFormConfig implements me.shedaniel.autoconfig.ConfigData {
 
     public boolean afkDormantDebug = false;
 
+    @ConfigEntry.Gui.Tooltip
+    public boolean afkDormantHudDebug = false;
+
     public boolean floatingItemDisplays = true;
 
     public double itemMainHandOffsetX = 0.0D;
@@ -105,11 +111,21 @@ public class SlimeFormConfig implements me.shedaniel.autoconfig.ConfigData {
     public double itemDisplayBobAmplitude = 0.01D;
     public boolean itemDebugShowAxes = false;
 
-    public boolean flowStateEnabled = false;
-    public boolean flowStateDebug = false;
-    public boolean flowStateAutoJump = true;
-    public int flowStateTransformSeconds = 2;
-    public int flowStateExitSeconds = 5;
+    public boolean doPhaseEnabled = false;
+
+    @ConfigEntry.Gui.Tooltip
+    public boolean slimeMorphEnabled = false;
+
+    @ConfigEntry.Gui.Tooltip
+    @ConfigEntry.BoundedDiscrete(min = 1, max = 10)
+    public int slimeMorphTransformSeconds = 2;
+
+    @ConfigEntry.Gui.Tooltip
+    @ConfigEntry.BoundedDiscrete(min = 1, max = 15)
+    public int slimeMorphExitSeconds = 5;
+
+    @ConfigEntry.Gui.Tooltip
+    public boolean slimeMorphAutoJump = true;
 
     @ConfigEntry.BoundedDiscrete(
             min = MIN_AFK_INACTIVITY_SECONDS,
@@ -169,12 +185,12 @@ public class SlimeFormConfig implements me.shedaniel.autoconfig.ConfigData {
         return clamp(afkInactivitySeconds, MIN_AFK_INACTIVITY_SECONDS, MAX_AFK_INACTIVITY_SECONDS);
     }
 
-    public int flowStateTransformTicks() {
-        return Math.max(1, flowStateTransformSeconds) * 20;
+    public int effectiveSlimeMorphTransformTicks() {
+        return Math.max(1, slimeMorphTransformSeconds) * 20;
     }
 
-    public int flowStateExitTicks() {
-        return Math.max(1, flowStateExitSeconds) * 20;
+    public int effectiveSlimeMorphExitTicks() {
+        return Math.max(1, slimeMorphExitSeconds) * 20;
     }
 
     public double effectiveRiderOffsetX() {

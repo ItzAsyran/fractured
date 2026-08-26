@@ -9,4 +9,7 @@ import org.spongepowered.asm.mixin.gen.Accessor;
 public interface MobGoalSelectorAccessor {
     @Accessor("goalSelector")
     GoalSelector slimeform$getGoalSelector();
+
+    @Accessor("targetSelector")
+    GoalSelector slimeform$getTargetSelector();
 }
