@@ -1,7 +1,6 @@
 # Fractured
 
-Fractured turns the player into a half-slime with custom growth, movement, damage, and recovery mechanics.
-
+rewriting this soon sooo just read the placeholder desc for now.. sorry :/
 ## Features
 
 ### Slime Form
@@ -17,15 +16,11 @@ When a SlimeForm player dies, they split into smaller slime fragments. If the fr
 
 ![Respawn and reform preview](docs/video/respawn.gif)
 
-[Open the full-resolution WebM preview](docs/video/respawn.webm)
-
 ### Sleeping Transformation
 
 Sleeping players are represented by a slime while SlimeForm is active.
 
 ![Sleeping transformation preview](docs/video/sleeping.gif)
-
-[Open the full-resolution WebM preview](docs/video/sleeping.webm)
 
 ### Dormant and Passive Slime Behavior
 
