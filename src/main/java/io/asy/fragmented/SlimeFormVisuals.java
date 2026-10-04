@@ -9,10 +9,10 @@ import net.minecraft.core.Direction;
 import net.minecraft.core.particles.ParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.world.entity.EntitySpawnReason;
-import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.Display.ItemDisplay;
 import net.minecraft.world.entity.EquipmentSlot;
-import net.minecraft.world.entity.monster.Slime;
+import net.minecraft.world.entity.monster.cubemob.Slime;
 import net.minecraft.world.item.ItemDisplayContext;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.AABB;
@@ -92,7 +92,7 @@ public final class SlimeFormVisuals {
         SlimeFormConfig config = SlimeFormConfig.get();
         boolean active = SlimeFormState.isActive(player);
         boolean sleeping = active && player.isSleeping();
-        boolean dormant = player.getTags().contains(SlimeFormMod.SLIME_DORMANT_TAG);
+        boolean dormant = player.entityTags().contains(SlimeFormMod.SLIME_DORMANT_TAG);
         if (active && !sleeping && !dormant) {
             tickAmbientParticles(player);
         } else if (!active) {
@@ -148,6 +148,10 @@ public final class SlimeFormVisuals {
     }
 
     private static void tickAmbientParticles(ServerPlayer player) {
+        if (!SlimeFormConfig.get().slimeFootstepParticles) {
+            AMBIENT_PARTICLE_TICKS.remove(player.getUUID());
+            return;
+        }
         long now = player.level().getGameTime();
         long last = AMBIENT_PARTICLE_TICKS.getOrDefault(player.getUUID(), Long.MIN_VALUE);
         boolean moving = player.getDeltaMovement().horizontalDistanceSqr() > 0.0001D;
@@ -210,7 +214,7 @@ public final class SlimeFormVisuals {
     }
 
     public static void refreshItemDisplays(ServerPlayer player) {
-        boolean dormant = player.getTags().contains(SlimeFormMod.SLIME_DORMANT_TAG);
+        boolean dormant = player.entityTags().contains(SlimeFormMod.SLIME_DORMANT_TAG);
         boolean sleeping = SlimeFormState.isActive(player) && player.isSleeping();
         if (!dormant && !sleeping) {
             return;
@@ -251,15 +255,15 @@ public final class SlimeFormVisuals {
         return level.getEntitiesOfClass(
                 Slime.class,
                 new AABB(player.blockPosition()).inflate(2.5D),
-                slime -> slime.getTags().contains(tag));
+                slime -> slime.entityTags().contains(tag));
     }
 
     private static Slime findDormant(ServerLevel level, ServerPlayer player, String tag) {
         Slime tracked = trackedDormant(player);
-        if (tracked != null && tracked.isAlive() && tracked.getTags().contains(tag)) {
+        if (tracked != null && tracked.isAlive() && tracked.entityTags().contains(tag)) {
             return tracked;
         }
-        if (player.getVehicle() instanceof Slime vehicle && vehicle.getTags().contains(tag)) {
+        if (player.getVehicle() instanceof Slime vehicle && vehicle.entityTags().contains(tag)) {
             DORMANT_SLIMES.put(player.getUUID(), vehicle.getUUID());
             return vehicle;
         }
@@ -279,7 +283,7 @@ public final class SlimeFormVisuals {
     }
 
     private static Slime create(ServerLevel level, ServerPlayer player, String tag, boolean dormant) {
-        Slime slime = EntityType.SLIME.create(level, EntitySpawnReason.TRIGGERED);
+        Slime slime = EntityTypes.SLIME.create(level, EntitySpawnReason.TRIGGERED);
         if (slime == null) {
             return null;
         }
@@ -524,7 +528,7 @@ public final class SlimeFormVisuals {
     }
 
     private static double randomBetween(ServerLevel level, double first, double second) {
-        return first + level.random.nextDouble() * (second - first);
+        return first + level.getRandom().nextDouble() * (second - first);
     }
 
     private static double horizontalDistance(Vec3 first, Vec3 second) {
@@ -544,7 +548,7 @@ public final class SlimeFormVisuals {
             DisplaySlot slot,
             Vec3 offset,
             ItemDisplaySession session) {
-        ItemDisplay display = EntityType.ITEM_DISPLAY.create(level, EntitySpawnReason.TRIGGERED);
+        ItemDisplay display = EntityTypes.ITEM_DISPLAY.create(level, EntitySpawnReason.TRIGGERED);
         if (display == null) {
             return;
         }
@@ -578,7 +582,7 @@ public final class SlimeFormVisuals {
         for (ItemDisplay display : level.getEntitiesOfClass(
                 ItemDisplay.class,
                 new AABB(player.blockPosition()).inflate(16.0D),
-                display -> display.getTags().stream().anyMatch(tag -> tag.startsWith(itemDisplayPrefix(player))))) {
+                display -> display.entityTags().stream().anyMatch(tag -> tag.startsWith(itemDisplayPrefix(player))))) {
             if (removed.add(display.getUUID())) {
                 display.discard();
             }

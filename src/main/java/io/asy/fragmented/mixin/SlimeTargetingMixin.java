@@ -4,8 +4,8 @@ import io.asy.fragmented.SlimeFormMod;
 import io.asy.fragmented.MagmaCubeRetaliationAccess;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
-import net.minecraft.world.entity.monster.Slime;
-import net.minecraft.world.entity.monster.MagmaCube;
+import net.minecraft.world.entity.monster.cubemob.Slime;
+import net.minecraft.world.entity.monster.cubemob.MagmaCube;
 import net.minecraft.world.entity.player.Player;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -19,9 +19,9 @@ public abstract class SlimeTargetingMixin {
     private void slimeform$noTargetPlayers(LivingEntity target, CallbackInfoReturnable<Boolean> cir) {
         if ((Object) this instanceof Mob mob
                 && target instanceof Player player
-                && (player.getTags().contains(SlimeFormMod.SLIME_DORMANT_TAG)
+                && (player.entityTags().contains(SlimeFormMod.SLIME_DORMANT_TAG)
                 || (mob instanceof Slime
-                && player.getTags().contains(SlimeFormMod.SLIME_FORM_TAG)
+                && player.entityTags().contains(SlimeFormMod.SLIME_FORM_TAG)
                 && (!(mob instanceof MagmaCube magmaCube)
                 || !((MagmaCubeRetaliationAccess) magmaCube).slimeform$isRetaliatingAgainst(player))))) {
             cir.setReturnValue(false);

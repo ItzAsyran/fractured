@@ -2,7 +2,7 @@ package io.asy.fragmented;
 
 import net.minecraft.world.entity.ai.goal.Goal;
 import net.minecraft.world.entity.Mob;
-import net.minecraft.world.entity.monster.Slime;
+import net.minecraft.world.entity.monster.cubemob.Slime;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.level.pathfinder.Path;
 
@@ -197,7 +197,7 @@ public final class SlimeRecoveryFleeGoal extends Goal {
         // SlimeMoveControl ignores generic wanted-position coordinates. Use
         // its native direction and movement commands so the normal slime jump
         // cycle travels through the calculated path nodes.
-        Vec3 next = fleePath.getNextNodePos().getCenter();
+        Vec3 next = Vec3.atCenterOf(fleePath.getNextNodePos());
         float yaw = (float) Math.toDegrees(Math.atan2(
                 next.z - slime.getZ(),
                 next.x - slime.getX())) - 90.0F;

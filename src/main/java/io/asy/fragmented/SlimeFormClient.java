@@ -1,19 +1,19 @@
 package io.asy.fragmented;
 
 import net.fabricmc.api.ClientModInitializer;
-import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
+import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.VanillaHudElements;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.KeyMapping;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.monster.Enemy;
-import net.minecraft.world.entity.monster.Slime;
+import net.minecraft.world.entity.monster.cubemob.Slime;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.AABB;
 import org.lwjgl.glfw.GLFW;
@@ -31,13 +31,20 @@ public final class SlimeFormClient implements ClientModInitializer {
     private static final int SLIME_HIGHLIGHT_COLOR = 0x55FF55;
     private static final int HOSTILE_HIGHLIGHT_COLOR = 0xFF5555;
     private static final int DEFAULT_HIGHLIGHT_COLOR = 0xFFFFFF;
-    private static final KeyMapping HIGHLIGHT_SLIMES_KEY = KeyBindingHelper.registerKeyBinding(
+    private static final KeyMapping.Category CONTROLS_CATEGORY = KeyMapping.Category.register(
+            Identifier.fromNamespaceAndPath(SlimeFormMod.MOD_ID, "controls"));
+    private static final KeyMapping HIGHLIGHT_SLIMES_KEY = KeyMappingHelper.registerKeyMapping(
             new KeyMapping(
                     "key.slimeform.highlight_nearby",
                     InputConstants.Type.KEYSYM,
                     GLFW.GLFW_KEY_G,
-                    KeyMapping.Category.register(Identifier.fromNamespaceAndPath(
-                            SlimeFormMod.MOD_ID, "controls"))));
+                    CONTROLS_CATEGORY));
+    public static final KeyMapping MORPH_KEY = KeyMappingHelper.registerKeyMapping(
+            new KeyMapping(
+                    "key.slimeform.morph",
+                    InputConstants.Type.KEYSYM,
+                    GLFW.GLFW_KEY_H,
+                    CONTROLS_CATEGORY));
     private static SlimeFormClient instance;
     private static volatile boolean slimeChunksEnabled;
     private static volatile List<SlimeFormPayloads.AuraSource> slimeChunkSources = List.of();
@@ -46,6 +53,7 @@ public final class SlimeFormClient implements ClientModInitializer {
     private int morphPhase;
     private int morphRemaining;
     private int morphTotal;
+    private int morphSize;
     private boolean dormantDebugVisible;
     private int dormantDebugRemainingTicks;
     private long dormantDebugLastUpdateTick;
@@ -78,6 +86,7 @@ public final class SlimeFormClient implements ClientModInitializer {
                     morphPhase = payload.phase();
                     morphRemaining = payload.remaining();
                     morphTotal = payload.total();
+                    morphSize = Math.max(SlimeFormState.MIN_SIZE, payload.size());
                 }));
         HudElementRegistry.attachElementAfter(
                 VanillaHudElements.BOSS_BAR,
@@ -96,6 +105,7 @@ public final class SlimeFormClient implements ClientModInitializer {
             morphPhase = 0;
             morphRemaining = 0;
             morphTotal = 0;
+            morphSize = 0;
             dormantDebugVisible = false;
             dormantDebugRemainingTicks = 0;
             dormantDebugLastUpdateTick = 0L;
@@ -108,13 +118,17 @@ public final class SlimeFormClient implements ClientModInitializer {
         updateHighlightedEntities(client);
 
         SlimeFormConfig config = SlimeFormConfig.get();
-        boolean activeTag = SlimeFormState.isActive(client.player);
         boolean active = SlimeFormState.isClientVisualSlimeForm(client.player);
-        boolean canSend = ClientPlayNetworking.canSend(SlimeFormPayloads.MORPH_INPUT_TYPE);
-        boolean crouch = client.options.keyShift.isDown();
-        if (config.slimeMorphEnabled && active && canSend) {
+        if (config.slimeMorphEnabled && active
+                && ClientPlayNetworking.canSend(SlimeFormPayloads.MORPH_TOGGLE_TYPE)) {
+            while (MORPH_KEY.consumeClick()) {
+                ClientPlayNetworking.send(new SlimeFormPayloads.MorphTogglePayload());
+            }
+        }
+
+        if (config.slimeMorphEnabled && isLocalMorphBodyActive()
+                && ClientPlayNetworking.canSend(SlimeFormPayloads.MORPH_INPUT_TYPE)) {
             ClientPlayNetworking.send(new SlimeFormPayloads.MorphInputPayload(
-                    crouch,
                     client.options.keyJump.isDown(),
                     client.options.keyUp.isDown(),
                     client.options.keyDown.isDown(),
@@ -144,6 +158,41 @@ public final class SlimeFormClient implements ClientModInitializer {
         }
     }
 
+    /**
+     * The morph state packet is the reliable local signal. Player entity tags
+     * are not guaranteed to be available on the local client immediately.
+     */
+    public static boolean isLocalMorphActive() {
+        return instance != null && instance.morphPhase != 0;
+    }
+
+    public static boolean isLocalMorphBodyActive() {
+        return instance != null && (instance.morphPhase == 2 || instance.morphPhase == 3);
+    }
+
+    /**
+     * Returns the server-confirmed local morph state, with synchronized entity tags
+     * retained as a fallback for other player render states.
+     */
+    public static boolean isClientMorphVisible(Player player) {
+        Minecraft client = Minecraft.getInstance();
+        return (player == client.player && instance != null && instance.morphPhase != 0)
+                || SlimeMorphManager.isMorphedClient(player);
+    }
+
+    /**
+     * Returns the packet-synchronized local size when available, otherwise the
+     * size derived from the player entity.
+     */
+    public static int getClientMorphSize(Player player) {
+        Minecraft client = Minecraft.getInstance();
+        if (player == client.player && instance != null && instance.morphPhase != 0
+                && instance.morphSize >= SlimeFormState.MIN_SIZE) {
+            return instance.morphSize;
+        }
+        return SlimeFormState.getRiderSize(player);
+    }
+
     public static boolean isClientSlimeChunk(int chunkX, int chunkZ) {
         if (!slimeChunksEnabled) {
             return false;
@@ -158,7 +207,16 @@ public final class SlimeFormClient implements ClientModInitializer {
     }
 
     public static int highlightColor(Entity entity) {
-        if (instance == null || !instance.highlightedEntities.containsKey(entity.getId())) {
+        if (instance == null) {
+            return -1;
+        }
+        int entityId;
+        try {
+            entityId = entity.getId();
+        } catch (IllegalStateException ignored) {
+            return -1;
+        }
+        if (!instance.highlightedEntities.containsKey(entityId)) {
             return -1;
         }
         if (entity instanceof Slime) {
@@ -210,7 +268,7 @@ public final class SlimeFormClient implements ClientModInitializer {
         highlightedEntities.clear();
     }
 
-    private void renderMorphHud(GuiGraphics graphics, net.minecraft.client.DeltaTracker tickCounter) {
+    private void renderMorphHud(GuiGraphicsExtractor graphics, net.minecraft.client.DeltaTracker tickCounter) {
         if (morphTotal <= 0 || (morphPhase != 1 && morphPhase != 3)) {
             return;
         }
@@ -223,12 +281,12 @@ public final class SlimeFormClient implements ClientModInitializer {
         graphics.fill(x, y, x + width, y + height, 0xAA202020);
         graphics.fill(x, y, x + filled, y + height, morphPhase == 1 ? 0xFF55D66F : 0xFF55B7D6);
         String label = morphPhase == 1 ? "Morphing into slime" : "Returning to player";
-        graphics.drawCenteredString(client.font,
+        graphics.centeredText(client.font,
                 Component.literal(label + " (" + ((morphRemaining + 19) / 20) + "s)"),
                 client.getWindow().getGuiScaledWidth() / 2, y - 12, 0xFFFFFFFF);
     }
 
-    private void renderDormantHud(GuiGraphics graphics, net.minecraft.client.DeltaTracker tickCounter) {
+    private void renderDormantHud(GuiGraphicsExtractor graphics, net.minecraft.client.DeltaTracker tickCounter) {
         Minecraft client = Minecraft.getInstance();
         if (!dormantDebugVisible || dormantDebugRemainingTicks <= 0 || client.player == null) {
             return;
@@ -244,6 +302,6 @@ public final class SlimeFormClient implements ClientModInitializer {
                 (int) ((200.0F - remainingTicks) * width / 200.0F)));
         graphics.fill(x, y, x + width, y + height, 0xAA202020);
         graphics.fill(x, y, x + filled, y + height, 0xFFE5B84B);
-        graphics.drawString(client.font, Component.literal("Entering AFK Mode"), x, y - 12, 0xFFFFFFFF, false);
+        graphics.text(client.font, Component.literal("Entering AFK Mode"), x, y - 12, 0xFFFFFFFF, false);
     }
 }

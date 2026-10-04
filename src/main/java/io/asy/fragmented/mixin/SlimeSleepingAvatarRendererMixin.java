@@ -19,7 +19,8 @@ public abstract class SlimeSleepingAvatarRendererMixin {
     private void slimeform$prepareSleepingSlime(
             Avatar avatar, AvatarRenderState state, float partialTick, CallbackInfo ci) {
         boolean replace = false;
-        if (avatar instanceof Player player) {
+        Player player = avatar instanceof Player candidate ? candidate : null;
+        if (player != null) {
             boolean dormant = SlimeFormMod.isDormant(player)
                     || (player.isInvisible() && SlimeFormState.isClientVisualSlimeForm(player));
             boolean sleeping = SlimeFormState.isClientVisualSlimeForm(player)

@@ -5,7 +5,6 @@ import com.terraformersmc.modmenu.api.ModMenuApi;
 import me.shedaniel.clothconfig2.api.ConfigBuilder;
 import me.shedaniel.clothconfig2.api.ConfigCategory;
 import me.shedaniel.clothconfig2.api.ConfigEntryBuilder;
-import me.shedaniel.clothconfig2.impl.builders.SubCategoryBuilder;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
@@ -60,12 +59,6 @@ public class SlimeFormModMenu implements ModMenuApi {
                         SlimeFormConfig.MIN_RECOVERY_REFORM_SAFETY_RADIUS, SlimeFormConfig.MAX_RECOVERY_REFORM_SAFETY_RADIUS)
                 .setDefaultValue(12).setSaveConsumer(value -> config.recoveryReformSafetyRadius = value)
                 .setTooltip(Component.translatable("config.slimeform.recovery_reform_safety_radius.tooltip")).build());
-        addToggle(recovery, entries, "recovery_flee_path_debug", config.recoveryFleePathDebug,
-                value -> config.recoveryFleePathDebug = value);
-        addToggle(recovery, entries, "recovery_flee_danger_debug", config.recoveryFleeDangerDebug,
-                value -> config.recoveryFleeDangerDebug = value);
-        addToggle(recovery, entries, "recovery_lineage_debug", config.recoveryLineageDebug,
-                value -> config.recoveryLineageDebug = value);
 
         ConfigCategory activity = builder.getOrCreateCategory(
                 Component.translatable("config.slimeform.category.activity"));
@@ -85,57 +78,15 @@ public class SlimeFormModMenu implements ModMenuApi {
         addIntSlider(activity, entries, "afk_duration", config.afkInactivitySeconds,
                 SlimeFormConfig.MIN_AFK_INACTIVITY_SECONDS, SlimeFormConfig.MAX_AFK_INACTIVITY_SECONDS,
                 value -> config.afkInactivitySeconds = value, 300);
-        addToggle(activity, entries, "afk_debug", config.afkDormantDebug,
-                value -> config.afkDormantDebug = value);
-        addToggle(activity, entries, "afk_hud_debug", config.afkDormantHudDebug,
-                value -> config.afkDormantHudDebug = value);
         addToggle(activity, entries, "water_behavior", config.slimeWaterBehavior,
                 value -> config.slimeWaterBehavior = value);
 
         ConfigCategory visuals = builder.getOrCreateCategory(
                 Component.translatable("config.slimeform.category.visuals"));
+        addToggle(visuals, entries, "slime_footstep_particles", config.slimeFootstepParticles,
+                value -> config.slimeFootstepParticles = value);
         addToggle(visuals, entries, "floating_item_displays", config.floatingItemDisplays,
                 value -> config.floatingItemDisplays = value);
-
-        SubCategoryBuilder mainHandOffset = entries.startSubCategory(
-                Component.translatable("config.slimeform.visuals.main_hand_offset"));
-        addDecimalSlider(mainHandOffset, entries, "item_main_hand_offset_x", config.itemMainHandOffsetX,
-                value -> config.itemMainHandOffsetX = value, SlimeFormConfig.MIN_ITEM_DISPLAY_OFFSET, SlimeFormConfig.MAX_ITEM_DISPLAY_OFFSET);
-        addDecimalSlider(mainHandOffset, entries, "item_main_hand_offset_y", config.itemMainHandOffsetY,
-                value -> config.itemMainHandOffsetY = value, SlimeFormConfig.MIN_ITEM_DISPLAY_OFFSET, SlimeFormConfig.MAX_ITEM_DISPLAY_OFFSET);
-        addDecimalSlider(mainHandOffset, entries, "item_main_hand_offset_z", config.itemMainHandOffsetZ,
-                value -> config.itemMainHandOffsetZ = value, SlimeFormConfig.MIN_ITEM_DISPLAY_OFFSET, SlimeFormConfig.MAX_ITEM_DISPLAY_OFFSET);
-        visuals.addEntry(mainHandOffset.setExpanded(false).build());
-
-        SubCategoryBuilder offHandOffset = entries.startSubCategory(
-                Component.translatable("config.slimeform.visuals.off_hand_offset"));
-        addDecimalSlider(offHandOffset, entries, "item_off_hand_offset_x", config.itemOffHandOffsetX,
-                value -> config.itemOffHandOffsetX = value, SlimeFormConfig.MIN_ITEM_DISPLAY_OFFSET, SlimeFormConfig.MAX_ITEM_DISPLAY_OFFSET);
-        addDecimalSlider(offHandOffset, entries, "item_off_hand_offset_y", config.itemOffHandOffsetY,
-                value -> config.itemOffHandOffsetY = value, SlimeFormConfig.MIN_ITEM_DISPLAY_OFFSET, SlimeFormConfig.MAX_ITEM_DISPLAY_OFFSET);
-        addDecimalSlider(offHandOffset, entries, "item_off_hand_offset_z", config.itemOffHandOffsetZ,
-                value -> config.itemOffHandOffsetZ = value, SlimeFormConfig.MIN_ITEM_DISPLAY_OFFSET, SlimeFormConfig.MAX_ITEM_DISPLAY_OFFSET);
-        visuals.addEntry(offHandOffset.setExpanded(false).build());
-
-        SubCategoryBuilder transform = entries.startSubCategory(
-                Component.translatable("config.slimeform.visuals.transform"));
-        addDecimalSlider(transform, entries, "item_display_scale", config.itemDisplayScale,
-                value -> config.itemDisplayScale = value, SlimeFormConfig.MIN_ITEM_DISPLAY_SCALE, SlimeFormConfig.MAX_ITEM_DISPLAY_SCALE);
-        addDecimalSlider(transform, entries, "item_display_rotation_x", config.itemDisplayRotationX,
-                value -> config.itemDisplayRotationX = value, SlimeFormConfig.MIN_ITEM_DISPLAY_ROTATION, SlimeFormConfig.MAX_ITEM_DISPLAY_ROTATION);
-        addDecimalSlider(transform, entries, "item_display_rotation_y", config.itemDisplayRotationY,
-                value -> config.itemDisplayRotationY = value, SlimeFormConfig.MIN_ITEM_DISPLAY_ROTATION, SlimeFormConfig.MAX_ITEM_DISPLAY_ROTATION);
-        addDecimalSlider(transform, entries, "item_display_rotation_z", config.itemDisplayRotationZ,
-                value -> config.itemDisplayRotationZ = value, SlimeFormConfig.MIN_ITEM_DISPLAY_ROTATION, SlimeFormConfig.MAX_ITEM_DISPLAY_ROTATION);
-        visuals.addEntry(transform.setExpanded(false).build());
-
-        SubCategoryBuilder animation = entries.startSubCategory(
-                Component.translatable("config.slimeform.visuals.animation"));
-        addDecimalSlider(animation, entries, "item_display_bob_amplitude", config.itemDisplayBobAmplitude,
-                value -> config.itemDisplayBobAmplitude = value, SlimeFormConfig.MIN_ITEM_DISPLAY_BOB, SlimeFormConfig.MAX_ITEM_DISPLAY_BOB);
-        visuals.addEntry(animation.setExpanded(false).build());
-        addToggle(visuals, entries, "item_debug_show_axes", config.itemDebugShowAxes,
-                value -> config.itemDebugShowAxes = value);
 
         ConfigCategory experimental = builder.getOrCreateCategory(
                 Component.translatable("config.slimeform.category.experimental"));
@@ -145,17 +96,34 @@ public class SlimeFormModMenu implements ModMenuApi {
                 value -> config.slimeChunksEnabled = value);
         addIntSlider(experimental, entries, "slime_chunk_chance", config.slimeChunkChance,
                 SlimeFormConfig.MIN_SLIME_CHUNK_CHANCE, SlimeFormConfig.MAX_SLIME_CHUNK_CHANCE,
-                value -> config.slimeChunkChance = value, 30);
+                value -> config.slimeChunkChance = value, 50);
         addToggle(experimental, entries, "slime_morph_enabled", config.slimeMorphEnabled,
                 value -> config.slimeMorphEnabled = value);
-        addToggle(experimental, entries, "slime_morph_auto_jump", config.slimeMorphAutoJump,
-                value -> config.slimeMorphAutoJump = value);
+        addToggle(experimental, entries, "swamp_spawn_enabled", config.swampSpawnEnabled,
+                value -> config.swampSpawnEnabled = value);
         addIntSlider(experimental, entries, "slime_morph_transform_seconds",
                 config.slimeMorphTransformSeconds, 1, 10,
                 value -> config.slimeMorphTransformSeconds = value, 2);
         addIntSlider(experimental, entries, "slime_morph_exit_seconds",
                 config.slimeMorphExitSeconds, 1, 15,
                 value -> config.slimeMorphExitSeconds = value, 5);
+
+        ConfigCategory debug = builder.getOrCreateCategory(
+                Component.translatable("config.slimeform.category.debug"));
+        addToggle(debug, entries, "recovery_flee_path_debug", config.recoveryFleePathDebug,
+                value -> config.recoveryFleePathDebug = value);
+        addToggle(debug, entries, "recovery_flee_danger_debug", config.recoveryFleeDangerDebug,
+                value -> config.recoveryFleeDangerDebug = value);
+        addToggle(debug, entries, "recovery_lineage_debug", config.recoveryLineageDebug,
+                value -> config.recoveryLineageDebug = value);
+        addToggle(debug, entries, "afk_debug", config.afkDormantDebug,
+                value -> config.afkDormantDebug = value);
+        addToggle(debug, entries, "afk_hud_debug", config.afkDormantHudDebug,
+                value -> config.afkDormantHudDebug = value);
+        addToggle(debug, entries, "item_debug_show_axes", config.itemDebugShowAxes,
+                value -> config.itemDebugShowAxes = value);
+        addToggle(debug, entries, "phase_debug", config.phaseDebugEnabled,
+                value -> config.phaseDebugEnabled = value);
 
         return builder.build();
     }
@@ -167,13 +135,6 @@ public class SlimeFormModMenu implements ModMenuApi {
                 .setTooltip(Component.translatable("config.slimeform." + key + ".tooltip")).build());
     }
 
-    private static void addToggle(SubCategoryBuilder category, ConfigEntryBuilder entries, String key,
-                                  boolean current, java.util.function.Consumer<Boolean> save) {
-        category.add(entries.startBooleanToggle(Component.translatable("config.slimeform." + key), current)
-                .setDefaultValue(current).setSaveConsumer(save)
-                .setTooltip(Component.translatable("config.slimeform." + key + ".tooltip")).build());
-    }
-
     private static void addIntSlider(ConfigCategory category, ConfigEntryBuilder entries, String key, int current,
                                      int min, int max, java.util.function.IntConsumer save, int defaultValue) {
         category.addEntry(entries.startIntSlider(Component.translatable("config.slimeform." + key), current, min, max)
@@ -181,21 +142,9 @@ public class SlimeFormModMenu implements ModMenuApi {
                 .setTooltip(Component.translatable("config.slimeform." + key + ".tooltip")).build());
     }
 
-    private static void addIntSlider(SubCategoryBuilder category, ConfigEntryBuilder entries, String key, int current,
-                                     int min, int max, java.util.function.IntConsumer save, int defaultValue) {
-        category.add(entries.startIntSlider(Component.translatable("config.slimeform." + key), current, min, max)
-                .setDefaultValue(defaultValue).setSaveConsumer(save::accept)
-                .setTooltip(Component.translatable("config.slimeform." + key + ".tooltip")).build());
-    }
-
     private static void addDecimalSlider(ConfigCategory category, ConfigEntryBuilder entries, String key, double current,
                                          java.util.function.DoubleConsumer save, double min, double max) {
         category.addEntry(decimalSlider(entries, key, current, save, min, max));
-    }
-
-    private static void addDecimalSlider(SubCategoryBuilder category, ConfigEntryBuilder entries, String key, double current,
-                                         java.util.function.DoubleConsumer save, double min, double max) {
-        category.add(decimalSlider(entries, key, current, save, min, max));
     }
 
     private static me.shedaniel.clothconfig2.api.AbstractConfigListEntry decimalSlider(
@@ -207,6 +156,6 @@ public class SlimeFormModMenu implements ModMenuApi {
         return entries.startIntSlider(Component.translatable("config.slimeform." + key), scaledCurrent, scaledMin, scaledMax)
                 .setTextGetter(value -> Component.literal(String.format(Locale.ROOT, "%.2f", value / 100.0D)))
                 .setDefaultValue(scaledCurrent).setSaveConsumer(value -> save.accept(value / 100.0D))
-                .setTooltip(Component.translatable("config.slimeform." + key + ".tooltip")).build();
+                .build();
     }
 }

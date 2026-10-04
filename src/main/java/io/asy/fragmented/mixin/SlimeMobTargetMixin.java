@@ -4,8 +4,8 @@ import io.asy.fragmented.SlimeFormMod;
 import io.asy.fragmented.MagmaCubeRetaliationAccess;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
-import net.minecraft.world.entity.monster.Slime;
-import net.minecraft.world.entity.monster.MagmaCube;
+import net.minecraft.world.entity.monster.cubemob.Slime;
+import net.minecraft.world.entity.monster.cubemob.MagmaCube;
 import net.minecraft.world.entity.player.Player;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
@@ -53,10 +53,10 @@ public abstract class SlimeMobTargetMixin {
 
     @Unique
     private boolean slimeform$isProtectedTarget(Mob mob, Player player) {
-        if (player.getTags().contains(SlimeFormMod.SLIME_DORMANT_TAG)) {
+        if (player.entityTags().contains(SlimeFormMod.SLIME_DORMANT_TAG)) {
             return true;
         }
-        if (!(mob instanceof Slime) || !player.getTags().contains(SlimeFormMod.SLIME_FORM_TAG)) {
+        if (!(mob instanceof Slime) || !player.entityTags().contains(SlimeFormMod.SLIME_FORM_TAG)) {
             return false;
         }
         return !(mob instanceof MagmaCube magmaCube)

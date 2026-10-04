@@ -6,4 +6,5 @@ public interface SlimeSleepingStateAccess {
     boolean slimeform$shouldReplaceWithSlime();
 
     void slimeform$setReplaceWithSlime(boolean replace);
+
 }

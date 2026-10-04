@@ -1,25 +1,26 @@
 package io.asy.fragmented;
 
-import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import io.asy.fragmented.mixin.MobGoalSelectorAccessor;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
+import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ClientboundSetCameraPacket;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntitySpawnReason;
-import net.minecraft.world.entity.EntityType;
-import net.minecraft.world.entity.monster.Slime;
+import net.minecraft.world.entity.EntityTypes;
+import net.minecraft.world.entity.monster.cubemob.Slime;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
-/** Dedicated, server-authoritative temporary slime body control. */
+/** Server-authoritative state and physical body for the temporary slime morph. */
 public final class SlimeMorphManager {
-    public static final String MORPH_TAG = "slimeform.morphed";
     public static final String BODY_TAG = "slimeform.morph_body";
     private static final Map<UUID, State> STATES = new HashMap<>();
 
@@ -27,12 +28,13 @@ public final class SlimeMorphManager {
     }
 
     public static boolean isMorphBody(Entity entity) {
-        return entity.getTags().contains(BODY_TAG);
+        return entity.entityTags().contains(BODY_TAG);
     }
 
     public static ServerPlayer ownerOf(Slime body) {
         for (Map.Entry<UUID, State> entry : STATES.entrySet()) {
-            if (entry.getValue().bodyId != null && entry.getValue().bodyId.equals(body.getUUID())
+            if (entry.getValue().bodyId != null
+                    && entry.getValue().bodyId.equals(body.getUUID())
                     && body.level() instanceof ServerLevel level) {
                 return level.getServer().getPlayerList().getPlayer(entry.getKey());
             }
@@ -40,78 +42,104 @@ public final class SlimeMorphManager {
         return null;
     }
 
+    public static boolean isMorphed(ServerPlayer player) {
+        State state = STATES.get(player.getUUID());
+        return state != null && (state.phase == Phase.MORPHED || state.phase == Phase.RETURNING);
+    }
+
+    /** Returns the size of the active morph, or the player's configured next-morph size. */
+    public static int getCurrentMorphSize(net.minecraft.world.entity.player.Player player) {
+        if (player instanceof ServerPlayer serverPlayer) {
+            State state = STATES.get(serverPlayer.getUUID());
+            if (state != null && (state.phase == Phase.MORPHED || state.phase == Phase.RETURNING)
+                    && state.morphSize >= SlimeFormState.MIN_SIZE) {
+                return state.morphSize;
+            }
+        }
+        return SlimeFormState.getMorphSize(player);
+    }
+
+    public static boolean isMorphedClient(net.minecraft.world.entity.player.Player player) {
+        return player.entityTags().contains(SlimeFormMod.MORPH_TAG);
+    }
+
     public static void handleInput(ServerPlayer player, SlimeFormPayloads.MorphInputPayload input) {
+        State state = STATES.get(player.getUUID());
+        if (state != null) {
+            state.input = input;
+            state.lastInputTick = player.level().getGameTime();
+        }
+    }
+
+    public static void handleToggle(ServerPlayer player) {
+        if (!SlimeFormConfig.get().slimeMorphEnabled || !eligible(player)) {
+            return;
+        }
         State state = STATES.computeIfAbsent(player.getUUID(), ignored -> new State());
-        state.input = input;
-        state.lastInputTick = player.level().getGameTime();
+        if (state.phase == Phase.IDLE) {
+            state.phase = Phase.ENTERING;
+            state.progress = 0;
+        } else if (state.phase == Phase.ENTERING) {
+            int enter = SlimeFormConfig.get().effectiveSlimeMorphTransformTicks();
+            int exit = SlimeFormConfig.get().effectiveSlimeMorphExitTicks();
+            state.phase = Phase.RETURNING;
+            state.progress = Math.max(0, exit - Math.round((float) state.progress * exit / enter));
+        } else if (state.phase == Phase.MORPHED) {
+            state.phase = Phase.RETURNING;
+            state.progress = 0;
+        } else if (state.phase == Phase.RETURNING) {
+            // The controlled body remains authoritative while the exit countdown
+            // is active. Cancelling that countdown must return to MORPHED directly;
+            // routing through ENTERING would call begin() and create a second body.
+            state.phase = Phase.MORPHED;
+            state.progress = 0;
+        }
+        if (state.phase == Phase.ENTERING) {
+            player.addTag(SlimeFormMod.MORPH_TAG);
+            SlimeFormState.refreshMorphDimensions(player);
+        }
+        sendState(player, state);
     }
 
     public static void tick(MinecraftServer server) {
         SlimeFormConfig config = SlimeFormConfig.get();
         for (ServerPlayer player : server.getPlayerList().getPlayers()) {
             State state = STATES.get(player.getUUID());
-            if (!config.slimeMorphEnabled || !eligible(player)) {
-                if (state != null) {
-                    finish(player, state, true);
-                }
-                continue;
-            }
             if (state == null) {
                 continue;
             }
-            if (player.level().getGameTime() - state.lastInputTick > 5L) {
-                state.input = new SlimeFormPayloads.MorphInputPayload(
-                        false, false, false, false, false, false, player.getYRot(), player.getXRot());
+            if (!config.slimeMorphEnabled || !eligible(player)) {
+                finish(player, state, false);
+                continue;
             }
-            if (state.phase == Phase.MORPHED || state.phase == Phase.EXITING) {
+
+            // Keep the player out of the crouching pose for every morph phase.
+            player.setShiftKeyDown(false);
+
+            if (state.phase == Phase.MORPHED || state.phase == Phase.RETURNING) {
                 Slime body = body(player, state);
-                if (body == null || !body.isAlive() || !player.isAlive()) {
+                if (body == null || !body.isAlive()) {
                     finish(player, state, false);
                     continue;
                 }
-                control(player, state, body, config);
-                if (state.phase == Phase.MORPHED && state.input.crouch()) {
-                    state.phase = Phase.EXITING;
-                    state.holdTicks = 0;
-                }
-                if (state.phase == Phase.EXITING) {
-                    if (!state.input.crouch()) {
-                        state.phase = Phase.MORPHED;
-                        state.holdTicks = 0;
-                        sendState(player, state, 0);
-                    } else {
-                        state.holdTicks++;
-                        int duration = config.effectiveSlimeMorphExitTicks();
-                        sendState(player, state, duration);
-                        if (state.holdTicks >= duration) {
-                            finish(player, state, true);
-                        }
-                    }
-                }
-            } else if (state.phase == Phase.TRANSFORMING || state.phase == Phase.EXITING) {
-                if (!state.input.crouch()) {
-                    state.phase = state.phase == Phase.EXITING ? Phase.MORPHED : Phase.IDLE;
-                    state.holdTicks = 0;
-                    sendState(player, state, 0);
-                    continue;
-                }
-                state.holdTicks++;
-                int duration = state.phase == Phase.TRANSFORMING
+                control(player, state, body);
+            }
+
+            if (state.phase == Phase.ENTERING || state.phase == Phase.RETURNING) {
+                int duration = state.phase == Phase.ENTERING
                         ? config.effectiveSlimeMorphTransformTicks()
                         : config.effectiveSlimeMorphExitTicks();
-                sendState(player, state, duration);
-                if (state.holdTicks >= duration) {
-                    if (state.phase == Phase.TRANSFORMING) {
+                state.progress++;
+                if (state.progress >= duration) {
+                    if (state.phase == Phase.ENTERING) {
                         begin(player, state);
                     } else {
                         finish(player, state, true);
+                        continue;
                     }
                 }
-            } else if (state.input.crouch()) {
-                state.phase = Phase.TRANSFORMING;
-                state.holdTicks = 0;
-                sendState(player, state, config.effectiveSlimeMorphTransformTicks());
             }
+            sendState(player, state);
         }
         STATES.entrySet().removeIf(entry -> server.getPlayerList().getPlayer(entry.getKey()) == null);
     }
@@ -119,24 +147,30 @@ public final class SlimeMorphManager {
     public static void stop(ServerPlayer player) {
         State state = STATES.remove(player.getUUID());
         if (state != null) {
-            finish(player, state, true);
+            finish(player, state, false);
+        } else {
+            player.removeTag(SlimeFormMod.MORPH_TAG);
+            SlimeFormState.refreshMorphDimensions(player);
         }
     }
 
     private static boolean eligible(ServerPlayer player) {
         return SlimeFormState.isActive(player) && !SlimeFormMod.isDormant(player)
-                && !player.isSpectator() && !player.isSleeping() && !player.isPassenger();
+                && !player.isSpectator() && !player.isSleeping() && !player.isPassenger()
+                && player.isAlive();
     }
 
     private static void begin(ServerPlayer player, State state) {
         ServerLevel level = (ServerLevel) player.level();
-        Slime body = EntityType.SLIME.create(level, EntitySpawnReason.TRIGGERED);
+        state.wasInvisible = player.isInvisible();
+        state.wasNoPhysics = player.noPhysics;
+        Slime body = EntityTypes.SLIME.create(level, EntitySpawnReason.TRIGGERED);
         if (body == null) {
-            state.phase = Phase.IDLE;
-            state.holdTicks = 0;
+            finish(player, state, false);
             return;
         }
-        body.setSize(SlimeFormState.getSize(player), true);
+        state.morphSize = SlimeFormState.getMorphSize(player);
+        body.setSize(state.morphSize, true);
         body.addTag(BODY_TAG);
         body.setPersistenceRequired();
         body.setNoAi(false);
@@ -146,35 +180,85 @@ public final class SlimeMorphManager {
         goals.slimeform$getTargetSelector().removeAllGoals(goal -> true);
         body.setPos(player.position());
         body.setYRot(player.getYRot());
+        body.setYHeadRot(player.getYRot());
         level.addFreshEntity(body);
+
         state.bodyId = body.getUUID();
         state.phase = Phase.MORPHED;
-        state.holdTicks = 0;
-        state.wasInvisible = player.isInvisible();
-        player.addTag(MORPH_TAG);
+        state.progress = 0;
+        state.lastInputTick = player.level().getGameTime();
+        player.addTag(SlimeFormMod.MORPH_TAG);
         player.setInvisible(true);
-        player.setDeltaMovement(Vec3.ZERO);
+        player.noPhysics = true;
         player.setCamera(body);
         player.connection.send(new ClientboundSetCameraPacket(body));
-        player.displayClientMessage(Component.literal("You became a slime. Hold crouch to return."), true);
-        sendState(player, state, 0);
+        player.sendOverlayMessage(Component.literal("You became a slime. Press the morph key to return."));
     }
 
-    private static void finish(ServerPlayer player, State state, boolean teleport) {
-        Slime body = body(player, state);
-        if (teleport && body != null && body.isAlive()) {
-            player.teleportTo(body.getX(), body.getY(), body.getZ());
+    private static void control(ServerPlayer player, State state, Slime body) {
+        SlimeFormPayloads.MorphInputPayload input = state.input;
+        if (player.level().getGameTime() - state.lastInputTick > 5L) {
+            input = new SlimeFormPayloads.MorphInputPayload(
+                    false, false, false, false, false, player.getYRot(), player.getXRot());
         }
+
+        player.setInvisible(true);
+        player.setPos(body.position());
+        player.noPhysics = true;
+
+        double strafe = (input.right() ? 1.0D : 0.0D) - (input.left() ? 1.0D : 0.0D);
+        double forward = (input.forward() ? 1.0D : 0.0D) - (input.back() ? 1.0D : 0.0D);
+        double length = Math.sqrt(strafe * strafe + forward * forward);
+        float movementYaw = input.yaw();
+        if (length > 0.0D) {
+            movementYaw += (float) Math.toDegrees(Math.atan2(strafe, forward));
+        }
+        boolean movementRequested = length > 0.0D || input.jump();
+
+        // Player input supplies the desired direction; vanilla SlimeMoveControl
+        // performs the actual speed, jumping, gravity, friction, and collision.
+        SlimeMoveControlAccess moveControl = (SlimeMoveControlAccess) body.getMoveControl();
+        moveControl.slimeform$setDirection(movementYaw, false);
+        moveControl.slimeform$setWantedMovement(
+                movementRequested ? 1.0D : 0.0D);
+        Vec3 velocity = body.getDeltaMovement();
+        if (!movementRequested || (body.onGround() && velocity.y <= 0.0D)) {
+            body.setDeltaMovement(0.0D, velocity.y, 0.0D);
+        }
+
+        // Do not reset the body's yaw to the player's look direction here.
+        // SlimeMoveControl rotates toward movementYaw, and resetting it every
+        // tick prevents backward movement from reaching its 180-degree target.
+    }
+
+    private static void finish(ServerPlayer player, State state, boolean successfulExit) {
+        Slime body = body(player, state);
         if (body != null) {
             body.remove(Entity.RemovalReason.DISCARDED);
         }
-        player.removeTag(MORPH_TAG);
+        player.removeTag(SlimeFormMod.MORPH_TAG);
         player.setInvisible(state.wasInvisible);
+        player.noPhysics = state.wasNoPhysics;
+        SlimeFormState.refreshMorphDimensions(player);
         player.setCamera(player);
         player.connection.send(new ClientboundSetCameraPacket(player));
-        player.setDeltaMovement(Vec3.ZERO);
-        sendState(player, state, 0);
+        state.phase = Phase.IDLE;
+        state.progress = 0;
+        state.bodyId = null;
+        sendState(player, state);
         STATES.remove(player.getUUID());
+        if (successfulExit) {
+            playExitFeedback(player);
+        }
+    }
+
+    private static void playExitFeedback(ServerPlayer player) {
+        ServerLevel level = (ServerLevel) player.level();
+        level.sendParticles(
+                ParticleTypes.ITEM_SLIME,
+                player.getX(), player.getY() + player.getBbHeight() * 0.5D, player.getZ(),
+                8, 0.25D, 0.35D, 0.25D, 0.03D);
+        player.playSound(SoundEvents.SLIME_SQUISH, 0.7F, 1.1F);
     }
 
     private static Slime body(ServerPlayer player, State state) {
@@ -182,45 +266,27 @@ public final class SlimeMorphManager {
                 && isMorphBody(slime) ? slime : null;
     }
 
-    private static void control(ServerPlayer player, State state, Slime body, SlimeFormConfig config) {
-        SlimeFormPayloads.MorphInputPayload input = state.input;
-        player.setInvisible(true);
-        player.setPos(body.position());
-        double strafe = (input.left() ? 1.0D : 0.0D) - (input.right() ? 1.0D : 0.0D);
-        double forward = (input.forward() ? 1.0D : 0.0D) - (input.back() ? 1.0D : 0.0D);
-        double length = Math.sqrt(strafe * strafe + forward * forward);
-
-        if (length > 0.0D) {
-            float movementYaw = input.yaw()
-                    + (float) Math.toDegrees(Math.atan2(strafe, forward));
-            ((SlimeMoveControlAccess) body.getMoveControl()).slimeform$setDirection(movementYaw, false);
-        } else if (input.jump()) {
-            ((SlimeMoveControlAccess) body.getMoveControl()).slimeform$setDirection(input.yaw(), false);
-        }
-
-        boolean movementRequested = length > 0.0D
-                || input.jump()
-                || (config.slimeMorphAutoJump && length > 0.0D);
-        SlimeMoveControlAccess moveControl = (SlimeMoveControlAccess) body.getMoveControl();
-        moveControl.slimeform$setWantedMovement(movementRequested ? 1.0D : 0.0D);
-    }
-
-    private static void sendState(ServerPlayer player, State state, int total) {
-        int remaining = Math.max(0, total - state.holdTicks);
+    private static void sendState(ServerPlayer player, State state) {
+        int total = state.phase == Phase.ENTERING
+                ? SlimeFormConfig.get().effectiveSlimeMorphTransformTicks()
+                : state.phase == Phase.RETURNING
+                ? SlimeFormConfig.get().effectiveSlimeMorphExitTicks() : 0;
+        int remaining = total == 0 ? 0 : Math.max(0, total - state.progress);
         ServerPlayNetworking.send(player, new SlimeFormPayloads.MorphStatePayload(
-                state.phase.ordinal(), remaining, total, state.bodyId == null ? -1 : player.level().getEntity(state.bodyId) == null
-                        ? -1 : player.level().getEntity(state.bodyId).getId()));
+                state.phase.ordinal(), remaining, total, getCurrentMorphSize(player)));
     }
 
-    enum Phase { IDLE, TRANSFORMING, MORPHED, EXITING }
+    public enum Phase { IDLE, ENTERING, MORPHED, RETURNING }
 
     private static final class State {
         private Phase phase = Phase.IDLE;
         private UUID bodyId;
-        private int holdTicks;
-        private boolean wasInvisible;
+        private int progress;
         private long lastInputTick;
+        private boolean wasInvisible;
+        private boolean wasNoPhysics;
+        private int morphSize;
         private SlimeFormPayloads.MorphInputPayload input = new SlimeFormPayloads.MorphInputPayload(
-                false, false, false, false, false, false, 0.0F, 0.0F);
+                false, false, false, false, false, 0.0F, 0.0F);
     }
 }

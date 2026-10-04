@@ -100,6 +100,8 @@ public class SlimeFormConfig implements me.shedaniel.autoconfig.ConfigData {
 
     public boolean floatingItemDisplays = true;
 
+    public boolean slimeFootstepParticles = true;
+
     public double itemMainHandOffsetX = 0.0D;
     public double itemMainHandOffsetY = 0.0D;
     public double itemMainHandOffsetZ = 0.0D;
@@ -115,15 +117,21 @@ public class SlimeFormConfig implements me.shedaniel.autoconfig.ConfigData {
 
     public boolean doPhaseEnabled = false;
 
+    /** Temporary bounded diagnostics for morph phase collision/suffocation. */
+    public boolean phaseDebugEnabled = false;
+
     @ConfigEntry.Gui.Tooltip
     public boolean slimeChunksEnabled = false;
 
     @ConfigEntry.Gui.Tooltip
     @ConfigEntry.BoundedDiscrete(min = MIN_SLIME_CHUNK_CHANCE, max = MAX_SLIME_CHUNK_CHANCE)
-    public int slimeChunkChance = 30;
+    public int slimeChunkChance = 50;
 
     @ConfigEntry.Gui.Tooltip
     public boolean slimeMorphEnabled = false;
+
+    @ConfigEntry.Gui.Tooltip
+    public boolean swampSpawnEnabled = false;
 
     @ConfigEntry.Gui.Tooltip
     @ConfigEntry.BoundedDiscrete(min = 1, max = 10)
@@ -132,9 +140,6 @@ public class SlimeFormConfig implements me.shedaniel.autoconfig.ConfigData {
     @ConfigEntry.Gui.Tooltip
     @ConfigEntry.BoundedDiscrete(min = 1, max = 15)
     public int slimeMorphExitSeconds = 5;
-
-    @ConfigEntry.Gui.Tooltip
-    public boolean slimeMorphAutoJump = true;
 
     @ConfigEntry.BoundedDiscrete(
             min = MIN_AFK_INACTIVITY_SECONDS,

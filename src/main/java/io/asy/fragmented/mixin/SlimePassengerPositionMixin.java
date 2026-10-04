@@ -3,7 +3,7 @@ package io.asy.fragmented.mixin;
 import io.asy.fragmented.SlimeFormMod;
 import io.asy.fragmented.SlimeFormState;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.monster.Slime;
+import net.minecraft.world.entity.monster.cubemob.Slime;
 import net.minecraft.world.entity.player.Player;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;

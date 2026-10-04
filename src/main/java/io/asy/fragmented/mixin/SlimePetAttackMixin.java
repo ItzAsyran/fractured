@@ -3,8 +3,8 @@ package io.asy.fragmented.mixin;
 import io.asy.fragmented.SlimeFormMod;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.monster.Slime;
-import net.minecraft.world.entity.monster.MagmaCube;
+import net.minecraft.world.entity.monster.cubemob.Slime;
+import net.minecraft.world.entity.monster.cubemob.MagmaCube;
 import net.minecraft.world.entity.player.Player;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -33,6 +33,7 @@ public abstract class SlimePetAttackMixin {
     private void slimeform$blockDormantEntityInteraction(
             Entity target,
             net.minecraft.world.InteractionHand hand,
+            net.minecraft.world.phys.Vec3 location,
             CallbackInfoReturnable<net.minecraft.world.InteractionResult> cir) {
         Player player = (Player) (Object) this;
         if (SlimeFormMod.isDormant(player)) {
@@ -50,7 +51,7 @@ public abstract class SlimePetAttackMixin {
 
         // Player.attack is called on both sides; changing mob AI belongs on the server.
         if (player.level().isClientSide()
-                || !player.getTags().contains(SlimeFormMod.SLIME_FORM_TAG)
+                || !player.entityTags().contains(SlimeFormMod.SLIME_FORM_TAG)
                 || !(target instanceof LivingEntity livingTarget)
                 || livingTarget instanceof Player
                 || (livingTarget instanceof Slime && !(livingTarget instanceof MagmaCube))) {

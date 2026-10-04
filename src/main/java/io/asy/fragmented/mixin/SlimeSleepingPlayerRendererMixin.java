@@ -3,12 +3,19 @@ package io.asy.fragmented.mixin;
 import io.asy.fragmented.SlimeFormState;
 import io.asy.fragmented.SlimeFormMod;
 import io.asy.fragmented.SlimeSleepingStateAccess;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.LivingEntityRenderer;
+import net.minecraft.client.renderer.entity.SlimeRenderer;
 import net.minecraft.client.renderer.entity.state.AvatarRenderState;
 import net.minecraft.client.renderer.entity.state.LivingEntityRenderState;
-import net.minecraft.client.renderer.state.CameraRenderState;
+import net.minecraft.client.renderer.entity.state.SlimeRenderState;
+import net.minecraft.client.renderer.state.level.CameraRenderState;
 import com.mojang.blaze3d.vertex.PoseStack;
+import net.minecraft.world.entity.EntitySpawnReason;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.monster.cubemob.Slime;
+import net.minecraft.world.entity.player.Player;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
@@ -30,6 +37,7 @@ abstract class SlimeSleepingAvatarRenderStateMixin implements SlimeSleepingState
     public void slimeform$setReplaceWithSlime(boolean replace) {
         slimeform$replaceWithSlime = replace;
     }
+
 }
 
 @Mixin(LivingEntityRenderer.class)

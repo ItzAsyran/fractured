@@ -3,14 +3,15 @@ package io.asy.fragmented.mixin;
 import io.asy.fragmented.SlimeFormMod;
 import io.asy.fragmented.SlimeFormConfig;
 import io.asy.fragmented.SlimeFormState;
+import io.asy.fragmented.SlimeMorphManager;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntitySpawnReason;
-import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.monster.Slime;
+import net.minecraft.world.entity.monster.cubemob.Slime;
 import net.minecraft.network.protocol.game.ClientboundGameEventPacket;
 import net.minecraft.ChatFormatting;
 import net.minecraft.world.level.GameType;
@@ -50,6 +51,7 @@ public abstract class SlimePlayerLifecycleMixin {
     @Inject(method = "die", at = @At("HEAD"))
     private void slimeform$splitOnDeath(DamageSource source, CallbackInfo ci) {
         ServerPlayer player = (ServerPlayer) (Object) this;
+        SlimeMorphManager.stop(player);
         if (slimeform$deathHandled || !SlimeFormState.isActive(player)) {
             return;
         }
@@ -89,10 +91,9 @@ public abstract class SlimePlayerLifecycleMixin {
             SlimeFormMod.syncRecoveryCamera(player, splitSlimes.get(0));
             player.connection.send(new ClientboundGameEventPacket(
                     ClientboundGameEventPacket.IMMEDIATE_RESPAWN, 1.0F));
-            player.displayClientMessage(
+            player.sendOverlayMessage(
                     Component.literal("You split into slimes. ").withStyle(ChatFormatting.YELLOW)
-                            .append(Component.literal("Reforming in 30 seconds...").withStyle(ChatFormatting.GRAY)),
-                    true);
+                            .append(Component.literal("Reforming in 30 seconds...").withStyle(ChatFormatting.GRAY)));
         }
 
         SlimeFormMod.LOGGER.info(
@@ -123,7 +124,7 @@ public abstract class SlimePlayerLifecycleMixin {
         ServerLevel level = player.level();
         List<Slime> splitSlimes = new java.util.ArrayList<>();
         for (int index = 0; index < count; index++) {
-            Slime slime = EntityType.SLIME.create(level, EntitySpawnReason.TRIGGERED);
+            Slime slime = EntityTypes.SLIME.create(level, EntitySpawnReason.TRIGGERED);
             if (slime == null) {
                 continue;
             }

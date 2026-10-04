@@ -2,7 +2,8 @@ package io.asy.fragmented.mixin;
 
 import io.asy.fragmented.SlimeRecoveryLineage;
 import io.asy.fragmented.SlimeFormMod;
-import net.minecraft.world.entity.monster.Slime;
+import net.minecraft.world.entity.monster.cubemob.AbstractCubeMob;
+import net.minecraft.world.entity.monster.cubemob.Slime;
 import net.minecraft.world.level.storage.ValueInput;
 import net.minecraft.world.level.storage.ValueOutput;
 import org.spongepowered.asm.mixin.Mixin;
@@ -13,7 +14,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import java.util.UUID;
 
-@Mixin(Slime.class)
+@Mixin(AbstractCubeMob.class)
 public abstract class SlimeRecoveryLineageMixin implements SlimeRecoveryLineage {
     @Unique
     private String slimeform$recoveryLineage;
@@ -48,6 +49,10 @@ public abstract class SlimeRecoveryLineageMixin implements SlimeRecoveryLineage 
 
     @Inject(method = "addAdditionalSaveData", at = @At("TAIL"))
     private void slimeform$saveRecoveryLineage(ValueOutput output, CallbackInfo ci) {
+        if (!((Object) this instanceof Slime)) {
+            return;
+        }
+
         if (slimeform$getRecoveryLineage() == null || slimeform$getRecoveryLineage().isEmpty()) {
             return;
         }
@@ -60,6 +65,10 @@ public abstract class SlimeRecoveryLineageMixin implements SlimeRecoveryLineage 
 
     @Inject(method = "readAdditionalSaveData", at = @At("TAIL"))
     private void slimeform$loadRecoveryLineage(ValueInput input, CallbackInfo ci) {
+        if (!((Object) this instanceof Slime)) {
+            return;
+        }
+
         String lineage = input.getStringOr("SlimeFormRecoveryLineage", "");
         if (lineage.isEmpty()) {
             return;

@@ -12,6 +12,7 @@ import net.minecraft.world.entity.player.Player;
 public final class SlimeFormState {
     public static final int MIN_SIZE = 1;
     private static final String SIZE_PREFIX = "slimeform.size.";
+    private static final String MORPH_SIZE_PREFIX = "slimeform.morph_size.";
     private static final Identifier HEALTH_MODIFIER_ID =
             Identifier.fromNamespaceAndPath(SlimeFormMod.MOD_ID, "slime_form_health");
     private static volatile boolean clientPhaseEnabled;
@@ -32,7 +33,7 @@ public final class SlimeFormState {
     }
 
     public static boolean isActive(Player player) {
-        return player.getTags().contains(SlimeFormMod.SLIME_FORM_TAG);
+        return player.entityTags().contains(SlimeFormMod.SLIME_FORM_TAG);
     }
 
     public static int getMaxSize() {
@@ -43,13 +44,36 @@ public final class SlimeFormState {
         return taggedSize(player);
     }
 
+    /** Returns the configured morph override, or the player's normal slime size. */
+    public static int getMorphSize(Player player) {
+        return player.entityTags().stream()
+                .filter(tag -> tag.startsWith(MORPH_SIZE_PREFIX))
+                .map(tag -> tag.substring(MORPH_SIZE_PREFIX.length()))
+                .mapToInt(SlimeFormState::parseSizeTag)
+                .filter(parsedSize -> parsedSize >= MIN_SIZE)
+                .max()
+                .orElse(getSize(player));
+    }
+
+    public static void setMorphSize(Player player, int size) {
+        if (size < MIN_SIZE) {
+            throw new IllegalArgumentException("Morph size must be positive");
+        }
+        player.entityTags().removeIf(tag -> tag.startsWith(MORPH_SIZE_PREFIX));
+        player.addTag(MORPH_SIZE_PREFIX + size);
+    }
+
+    public static void resetMorphSize(Player player) {
+        player.entityTags().removeIf(tag -> tag.startsWith(MORPH_SIZE_PREFIX));
+    }
+
     /**
      * Resolves the slime size for rider positioning, including the client-side
      * max-health fallback when synchronized size tags are unavailable.
      */
     public static int getRiderSize(Player player) {
         int taggedSize = taggedSize(player);
-        if (taggedSize != getMaxSize() || player.getTags().contains(SIZE_PREFIX + taggedSize)) {
+        if (taggedSize != getMaxSize() || player.entityTags().contains(SIZE_PREFIX + taggedSize)) {
             return taggedSize;
         }
 
@@ -71,13 +95,20 @@ public final class SlimeFormState {
     }
 
     public static void setSize(Player player, int size) {
-        player.getTags().removeIf(tag -> tag.startsWith(SIZE_PREFIX));
+        player.entityTags().removeIf(tag -> tag.startsWith(SIZE_PREFIX));
         player.addTag(SIZE_PREFIX + Math.max(MIN_SIZE, Math.min(getMaxSize(), size)));
+        if (player instanceof ServerPlayer serverPlayer && SlimeMorphManager.isMorphed(serverPlayer)) {
+            refreshMorphDimensions(serverPlayer);
+        }
+    }
+
+    public static void refreshMorphDimensions(Player player) {
+        player.refreshDimensions();
     }
 
     public static void deactivate(Player player) {
         player.removeTag(SlimeFormMod.SLIME_FORM_TAG);
-        player.getTags().removeIf(tag -> tag.startsWith(SIZE_PREFIX));
+        player.entityTags().removeIf(tag -> tag.startsWith(SIZE_PREFIX));
         removeHealthModifier(player);
     }
 
@@ -86,7 +117,7 @@ public final class SlimeFormState {
     }
 
     private static int taggedSize(Player player) {
-        int size = player.getTags().stream()
+        int size = player.entityTags().stream()
                 .filter(tag -> tag.startsWith(SIZE_PREFIX))
                 .map(tag -> tag.substring(SIZE_PREFIX.length()))
                 .mapToInt(SlimeFormState::parseSizeTag)

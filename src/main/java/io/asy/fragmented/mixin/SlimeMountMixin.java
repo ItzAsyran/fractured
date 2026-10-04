@@ -5,7 +5,7 @@ import io.asy.fragmented.SlimeFormState;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.monster.Slime;
+import net.minecraft.world.entity.monster.cubemob.Slime;
 import net.minecraft.world.entity.player.Player;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -16,11 +16,12 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 public abstract class SlimeMountMixin {
     @Inject(method = "interact", at = @At("HEAD"), cancellable = true)
     private void slimeform$mountActivatedPlayer(
-            Player player, InteractionHand hand, CallbackInfoReturnable<InteractionResult> cir) {
+            Player player, InteractionHand hand, net.minecraft.world.phys.Vec3 location,
+            CallbackInfoReturnable<InteractionResult> cir) {
         if (hand == InteractionHand.MAIN_HAND
                 && SlimeFormState.isActive(player)
                 && (Object) this instanceof Slime slime
-                && slime.getTags().stream().noneMatch(tag -> tag.startsWith("slimeform.visual."))
+                && slime.entityTags().stream().noneMatch(tag -> tag.startsWith("slimeform.visual."))
                 && !player.isPassenger()
                 && slime.getPassengers().isEmpty()) {
             if (player.level().isClientSide()) {

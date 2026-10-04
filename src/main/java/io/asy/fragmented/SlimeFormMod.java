@@ -3,6 +3,7 @@ package io.asy.fragmented;
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.arguments.BoolArgumentType;
 import com.mojang.brigadier.arguments.DoubleArgumentType;
+import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import me.shedaniel.autoconfig.AutoConfig;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
@@ -27,15 +28,15 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.MobCategory;
 import net.minecraft.world.entity.item.ItemEntity;
-import net.minecraft.world.entity.monster.Slime;
-import net.minecraft.world.entity.monster.MagmaCube;
+import net.minecraft.world.entity.monster.cubemob.Slime;
+import net.minecraft.world.entity.monster.cubemob.MagmaCube;
 import net.minecraft.world.entity.monster.Enemy;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.BossEvent;
@@ -68,6 +69,7 @@ import java.util.UUID;
 public class SlimeFormMod implements ModInitializer {
     public static final String MOD_ID = "slimeform";
     public static final String SLIME_FORM_TAG = "slimeform.active";
+    public static final String MORPH_TAG = "slimeform.morphed";
     public static final String SLIME_DORMANT_TAG = "slimeform.dormant";
     public static final String PLAYER_RECOVERY_SLIME_TAG = "slimeform.player_recovery";
     public static final String PLAYER_DORMANT_SLIME_TAG = "slimeform.player_dormant";
@@ -194,33 +196,42 @@ public class SlimeFormMod implements ModInitializer {
     @Override
     public void onInitialize() {
         SlimeFormConfig.initialize();
-        PayloadTypeRegistry.playC2S().register(
+        PayloadTypeRegistry.serverboundPlay().register(
                 SlimeFormPayloads.WAKE_DORMANT_TYPE,
                 SlimeFormPayloads.WAKE_DORMANT_CODEC);
-        PayloadTypeRegistry.playS2C().register(
+        PayloadTypeRegistry.clientboundPlay().register(
                 SlimeFormPayloads.PHASE_STATE_TYPE,
                 SlimeFormPayloads.PHASE_STATE_CODEC);
-        PayloadTypeRegistry.playS2C().register(
+        PayloadTypeRegistry.clientboundPlay().register(
                 SlimeFormPayloads.SLIME_CHUNKS_STATE_TYPE,
                 SlimeFormPayloads.SLIME_CHUNKS_STATE_CODEC);
-        PayloadTypeRegistry.playS2C().register(
+        PayloadTypeRegistry.clientboundPlay().register(
                 SlimeFormPayloads.DORMANT_DEBUG_TYPE,
                 SlimeFormPayloads.DORMANT_DEBUG_CODEC);
-        PayloadTypeRegistry.playC2S().register(
+        PayloadTypeRegistry.serverboundPlay().register(
+                SlimeFormPayloads.MORPH_TOGGLE_TYPE,
+                SlimeFormPayloads.MORPH_TOGGLE_CODEC);
+        PayloadTypeRegistry.serverboundPlay().register(
                 SlimeFormPayloads.MORPH_INPUT_TYPE,
                 SlimeFormPayloads.MORPH_INPUT_CODEC);
-        PayloadTypeRegistry.playS2C().register(
+        PayloadTypeRegistry.clientboundPlay().register(
                 SlimeFormPayloads.MORPH_STATE_TYPE,
                 SlimeFormPayloads.MORPH_STATE_CODEC);
         ServerPlayNetworking.registerGlobalReceiver(
                 SlimeFormPayloads.WAKE_DORMANT_TYPE,
                 (payload, context) -> wakeDormant(context.player()));
         ServerPlayNetworking.registerGlobalReceiver(
+                SlimeFormPayloads.MORPH_TOGGLE_TYPE,
+                (payload, context) -> SlimeMorphManager.handleToggle(context.player()));
+        ServerPlayNetworking.registerGlobalReceiver(
                 SlimeFormPayloads.MORPH_INPUT_TYPE,
                 (payload, context) -> SlimeMorphManager.handleInput(context.player(), payload));
         LOGGER.info("Sliming.");
 
         ServerTickEvents.END_SERVER_TICK.register(server -> {
+            for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+                SlimeRiderScale.tick(player);
+            }
             tickRecoveries(server);
             tickPassiveSlimeSpawning(server);
             tickDormantPlayers(server);
@@ -250,6 +261,7 @@ public class SlimeFormMod implements ModInitializer {
         });
         ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> {
             ServerPlayer player = handler.getPlayer();
+            SlimeRiderScale.clear(player);
             SlimeMorphManager.stop(player);
             clearCalibrationFor(player);
             wakeDormant(player);
@@ -269,6 +281,15 @@ public class SlimeFormMod implements ModInitializer {
                                 .executes(context -> showSlimeStatus(context.getSource().getPlayerOrException())))
                         .then(Commands.literal("off")
                                 .executes(context -> deactivateSlimeForm(context.getSource().getPlayerOrException())))
+                        .then(Commands.literal("morph")
+                                .then(Commands.literal("size")
+                                        .then(Commands.argument("value", IntegerArgumentType.integer(1))
+                                                .executes(context -> setMorphSize(
+                                                        context.getSource().getPlayerOrException(),
+                                                        IntegerArgumentType.getInteger(context, "value"))))
+                                        .then(Commands.literal("reset")
+                                                .executes(context -> resetMorphSize(
+                                                        context.getSource().getPlayerOrException())))))
                         .then(Commands.literal("calibrate")
                                 .then(Commands.literal("westeast")
                                         .executes(context -> beginCalibration(
@@ -325,6 +346,11 @@ public class SlimeFormMod implements ModInitializer {
                 .then(Commands.literal("doPhase")
                         .then(Commands.argument("enabled", BoolArgumentType.bool())
                                 .executes(context -> setDoPhase(
+                                        context.getSource().getPlayerOrException(),
+                                        BoolArgumentType.getBool(context, "enabled")))))
+                .then(Commands.literal("phaseDebug")
+                        .then(Commands.argument("enabled", BoolArgumentType.bool())
+                                .executes(context -> setPhaseDebug(
                                         context.getSource().getPlayerOrException(),
                                         BoolArgumentType.getBool(context, "enabled")))))
                 .then(Commands.literal("slimeChunks")
@@ -629,6 +655,19 @@ public class SlimeFormMod implements ModInitializer {
         return Command.SINGLE_SUCCESS;
     }
 
+    private static int setPhaseDebug(ServerPlayer player, boolean enabled) {
+        SlimeFormConfig.get().phaseDebugEnabled = enabled;
+        AutoConfig.getConfigHolder(SlimeFormConfig.class).save();
+        if (enabled) {
+            SlimeFormPhaseDebug.reset();
+        }
+        player.sendSystemMessage(Component.literal(String.format(
+                java.util.Locale.ROOT,
+                "SlimeForm phase diagnostics %s.",
+                enabled ? "enabled" : "disabled")));
+        return Command.SINGLE_SUCCESS;
+    }
+
     private static int setSlimeChunks(ServerPlayer player, boolean enabled) {
         SlimeFormConfig config = SlimeFormConfig.get();
         config.slimeChunksEnabled = enabled;
@@ -748,7 +787,7 @@ public class SlimeFormMod implements ModInitializer {
     private static final Map<UUID, Boolean> DORMANT_PREVIOUS_INVISIBILITY = new HashMap<>();
 
     public static boolean isDormant(Player player) {
-        return player.getTags().contains(SLIME_DORMANT_TAG);
+        return player.entityTags().contains(SLIME_DORMANT_TAG);
     }
 
     public static void recordActivity(ServerPlayer player) {
@@ -775,7 +814,7 @@ public class SlimeFormMod implements ModInitializer {
         SlimeFormVisuals.queueDormantRemoval(player);
         Boolean previousInvisibility = DORMANT_PREVIOUS_INVISIBILITY.remove(player.getUUID());
         player.setInvisible(previousInvisibility != null && previousInvisibility);
-        player.displayClientMessage(Component.literal("Dormant mode ended.").withStyle(ChatFormatting.GREEN), true);
+        player.sendOverlayMessage(Component.literal("Dormant mode ended.").withStyle(ChatFormatting.GREEN));
         ACTIVITY_TICKS.put(player.getUUID(), player.level().getGameTime());
         ACTIVITY_POSITIONS.put(player.getUUID(), player.position());
     }
@@ -801,10 +840,9 @@ public class SlimeFormMod implements ModInitializer {
                 }
                 player.setInvisible(true);
                 if (now % 20L == 0L) {
-                    player.displayClientMessage(
+                    player.sendOverlayMessage(
                             Component.literal("AFK mode active ").withStyle(ChatFormatting.AQUA)
-                                    .append(Component.literal("— left-click to wake.").withStyle(ChatFormatting.GRAY)),
-                            true);
+                                    .append(Component.literal("— left-click to wake.").withStyle(ChatFormatting.GRAY)));
                 }
                 SlimeFormVisuals.tick(player);
                 continue;
@@ -822,11 +860,10 @@ public class SlimeFormMod implements ModInitializer {
                     && now - last < inactivityLimit
                     && now % 20L == 0L) {
                 int secondsRemaining = (int) Math.ceil((inactivityLimit - (now - last)) / 20.0D);
-                player.displayClientMessage(
+                player.sendOverlayMessage(
                         Component.literal("Dormant in ").withStyle(ChatFormatting.AQUA)
                                 .append(Component.literal(secondsRemaining + "s")
-                                        .withStyle(ChatFormatting.YELLOW)),
-                        true);
+                                        .withStyle(ChatFormatting.YELLOW)));
             }
             if (now % 20L == 0L) {
                 boolean showHudTimer = config.afkDormantEnabled
@@ -842,10 +879,9 @@ public class SlimeFormMod implements ModInitializer {
                 if (blockReason == null) {
                     enterDormant(player);
                 } else if (config.afkDormantDebug && now % 20L == 0L) {
-                    player.displayClientMessage(
+                    player.sendOverlayMessage(
                             Component.literal("Dormant paused: ").withStyle(ChatFormatting.YELLOW)
-                                    .append(Component.literal(blockReason).withStyle(ChatFormatting.GRAY)),
-                            true);
+                                    .append(Component.literal(blockReason).withStyle(ChatFormatting.GRAY)));
                 }
             }
             SlimeFormVisuals.tick(player);
@@ -863,10 +899,9 @@ public class SlimeFormMod implements ModInitializer {
         player.addTag(SLIME_DORMANT_TAG);
         player.setDeltaMovement(Vec3.ZERO);
         SlimeFormVisuals.tick(player);
-        player.displayClientMessage(
+        player.sendOverlayMessage(
                 Component.literal("Dormant slime engaged. ").withStyle(ChatFormatting.GREEN)
-                        .append(Component.literal("Left-click to wake.").withStyle(ChatFormatting.GRAY)),
-                true);
+                        .append(Component.literal("Left-click to wake.").withStyle(ChatFormatting.GRAY)));
         LOGGER.info("[slimeform] Player {} entered dormant mode; vehicle={}",
                 player.getName().getString(),
                 player.getVehicle() == null ? "none" : player.getVehicle().getType());
@@ -908,7 +943,7 @@ public class SlimeFormMod implements ModInitializer {
     }
 
     private static double getRiderSizeMultiplier(Player player) {
-        return SlimeFormState.getRiderSize(player);
+        return SlimeFormState.getRiderSize(player) * player.getScale();
     }
 
     public static double getRiderOffsetX(Player player) {
@@ -990,8 +1025,8 @@ public class SlimeFormMod implements ModInitializer {
     }
 
     public static boolean isPlayerOriginSlime(Slime slime) {
-        return slime.getTags().contains(PLAYER_RECOVERY_SLIME_TAG)
-                || slime.getTags().contains(PLAYER_DORMANT_SLIME_TAG)
+        return slime.entityTags().contains(PLAYER_RECOVERY_SLIME_TAG)
+                || slime.entityTags().contains(PLAYER_DORMANT_SLIME_TAG)
                 || hasRecoveryLineage(slime);
     }
 
@@ -1093,7 +1128,7 @@ public class SlimeFormMod implements ModInitializer {
                     // Preserve the exact remaining countdown while danger is
                     // present. It resumes when the safety radius is clear.
                     if (recovery.recoveryElapsedTicks % RECOVERY_COUNTDOWN_INTERVAL_TICKS == 0) {
-                        player.displayClientMessage(createHostileReformStatus(recovery), true);
+                        player.sendOverlayMessage(createHostileReformStatus(recovery));
                     }
                 } else {
                     if (!recovery.sizeOneReformCountdownStarted) {
@@ -1103,8 +1138,8 @@ public class SlimeFormMod implements ModInitializer {
                     recovery.ticksRemaining--;
                     if (recovery.ticksRemaining % RECOVERY_COUNTDOWN_INTERVAL_TICKS == 0
                             && recovery.ticksRemaining > 0) {
-                        player.displayClientMessage(
-                                createRecoveryProgressBar(recovery.ticksRemaining, recovery.totalTicks), true);
+                        player.sendOverlayMessage(
+                                createRecoveryProgressBar(recovery.ticksRemaining, recovery.totalTicks));
                     }
                     reformCountdownComplete = recovery.ticksRemaining <= 0;
                 }
@@ -1113,8 +1148,8 @@ public class SlimeFormMod implements ModInitializer {
                 recovery.ticksRemaining--;
                 if (recovery.ticksRemaining % RECOVERY_COUNTDOWN_INTERVAL_TICKS == 0
                         && recovery.ticksRemaining > 0) {
-                    player.displayClientMessage(
-                            createRecoveryProgressBar(recovery.ticksRemaining, recovery.totalTicks), true);
+                    player.sendOverlayMessage(
+                            createRecoveryProgressBar(recovery.ticksRemaining, recovery.totalTicks));
                 }
                 reformCountdownComplete = recovery.ticksRemaining <= 0;
             }
@@ -1167,7 +1202,7 @@ public class SlimeFormMod implements ModInitializer {
             SlimeFormState.applyHealth(replacement, true);
             restoreInventory(replacement, recovery.inventory());
             playReformEffects(recoveryLevel, replacement);
-            replacement.displayClientMessage(Component.empty(), true);
+            replacement.sendOverlayMessage(Component.empty());
             replacement.sendSystemMessage(Component.literal("You have reformed.").withStyle(ChatFormatting.GREEN));
             LOGGER.info("[slimeform] Recovery completed for {} in {} at ({}, {}, {}), "
                             + "gameMode()={}, internalMode={}, spectator={}, connectionPlayer={}",
@@ -1279,22 +1314,22 @@ public class SlimeFormMod implements ModInitializer {
         int passiveNearby = level.getEntitiesOfClass(
                 Slime.class,
                 nearbyArea,
-                slime -> slime.getTags().contains(PASSIVE_SLIME_TAG)).size();
+                slime -> slime.entityTags().contains(PASSIVE_SLIME_TAG)).size();
         if (passiveNearby >= config.effectiveMaxNearbySpawnedSlimes()
                 || !hasMonsterMobCapSpace(level)) {
             return;
         }
 
-        double angle = level.random.nextDouble() * Math.PI * 2.0D;
+        double angle = level.getRandom().nextDouble() * Math.PI * 2.0D;
         double distance = PASSIVE_SPAWN_MIN_DISTANCE
-                + level.random.nextDouble()
+                + level.getRandom().nextDouble()
                 * (PASSIVE_SPAWN_MAX_DISTANCE - PASSIVE_SPAWN_MIN_DISTANCE);
         int x = (int) Math.floor(player.getX() + Math.cos(angle) * distance);
         int z = (int) Math.floor(player.getZ() + Math.sin(angle) * distance);
         int y = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z);
         BlockPos spawnPos = new BlockPos(x, y, z);
         int light = level.getMaxLocalRawBrightness(spawnPos);
-        boolean nighttime = level.getDayTime() % 24000L >= 13000L;
+        boolean nighttime = level.getOverworldClockTime() % 24000L >= 13000L;
         if (!nighttime && light > PASSIVE_SPAWN_LIGHT_THRESHOLD) {
             return;
         }
@@ -1308,17 +1343,17 @@ public class SlimeFormMod implements ModInitializer {
                 / 100.0D
                 * distanceWeight
                 * conditionWeight;
-        if (level.random.nextDouble() >= chance
+        if (level.getRandom().nextDouble() >= chance
                 || !Slime.checkSlimeSpawnRules(
-                        EntityType.SLIME,
+                        EntityTypes.SLIME,
                         level,
                         EntitySpawnReason.NATURAL,
                         spawnPos,
-                        level.random)) {
+                        level.getRandom())) {
             return;
         }
 
-        Slime slime = EntityType.SLIME.create(level, EntitySpawnReason.NATURAL);
+        Slime slime = EntityTypes.SLIME.create(level, EntitySpawnReason.NATURAL);
         if (slime == null) {
             return;
         }
@@ -2149,6 +2184,22 @@ public class SlimeFormMod implements ModInitializer {
         return Command.SINGLE_SUCCESS;
     }
 
+    private static int setMorphSize(ServerPlayer player, int size) {
+        SlimeFormState.setMorphSize(player, size);
+        player.sendSystemMessage(Component.literal(
+                "Custom morph size set to " + size + ". It will apply to your next morph.")
+                .withStyle(ChatFormatting.GREEN));
+        return size;
+    }
+
+    private static int resetMorphSize(ServerPlayer player) {
+        SlimeFormState.resetMorphSize(player);
+        player.sendSystemMessage(Component.literal(
+                "Custom morph size reset. Morphing will use your normal slime size.")
+                .withStyle(ChatFormatting.GREEN));
+        return Command.SINGLE_SUCCESS;
+    }
+
     private static MutableComponent labeledMessage(
             String label,
             String value,
@@ -2269,6 +2320,7 @@ public class SlimeFormMod implements ModInitializer {
             this.inventory = inventory;
             this.lastKnownPosition = new Vec3(x, y, z);
             this.fleeDangerBar = new ServerBossEvent(
+                    UUID.randomUUID(),
                     Component.literal("Recovery danger"),
                     BossEvent.BossBarColor.GREEN,
                     BossEvent.BossBarOverlay.PROGRESS);

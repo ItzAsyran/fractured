@@ -1,56 +1,42 @@
 package io.asy.fragmented.mixin;
 
-import io.asy.fragmented.SlimeFormMod;
 import io.asy.fragmented.SlimeFormConfig;
-import net.minecraft.core.Holder;
+import io.asy.fragmented.SlimeFormMod;
 import net.minecraft.core.BlockPos;
-import net.minecraft.tags.TagKey;
 import net.minecraft.util.RandomSource;
+import net.minecraft.world.Difficulty;
 import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.EntityType;
-import net.minecraft.world.entity.monster.Slime;
+import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.monster.cubemob.Slime;
 import net.minecraft.world.level.LevelAccessor;
-import net.minecraft.world.level.biome.Biome;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Redirect;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
+/**
+ * Inside the slime-chunk aura around active slime-form players, natural slime
+ * spawns ignore the vanilla biome, moon phase, light level, height and
+ * slime-chunk rules. Only peaceful difficulty and the basic mob placement
+ * check (solid block below) still apply. Spawner spawns stay vanilla.
+ */
 @Mixin(Slime.class)
 public final class SlimeChunkSpawnRuleMixin {
-    @Redirect(
-            method = "checkSlimeSpawnRules",
-            at = @At(
-                    value = "INVOKE",
-                    target = "Lnet/minecraft/core/Holder;is(Lnet/minecraft/tags/TagKey;)Z"))
-    private static boolean slimeform$ignoreAuraBiome(
-            Holder<Biome> biome,
-            TagKey<Biome> tag,
+    @Inject(method = "checkSlimeSpawnRules", at = @At("HEAD"), cancellable = true)
+    private static void slimeform$auraSpawnRules(
             EntityType<Slime> type,
             LevelAccessor level,
             EntitySpawnReason spawnReason,
-            BlockPos pos) {
-        if (SlimeFormMod.isSlimeChunkAuraActive(level, pos)) {
-            return false;
-        }
-        return biome.is(tag);
-    }
-
-    @Redirect(
-            method = "checkSlimeSpawnRules",
-            at = @At(
-                    value = "INVOKE",
-                    target = "Lnet/minecraft/util/RandomSource;nextInt(I)I",
-                    ordinal = 1))
-    private static int slimeform$allowNearbySlimeChunk(
+            BlockPos pos,
             RandomSource random,
-            int bound,
-            EntityType<Slime> type,
-            LevelAccessor level,
-            EntitySpawnReason spawnReason,
-            BlockPos pos) {
-        if (bound == 10 && SlimeFormMod.isSlimeChunkAuraActive(level, pos)) {
-            return random.nextInt(100) < SlimeFormConfig.get().effectiveSlimeChunkChance() ? 0 : 1;
+            CallbackInfoReturnable<Boolean> cir) {
+        if (level.getDifficulty() == Difficulty.PEACEFUL
+                || EntitySpawnReason.isSpawner(spawnReason)
+                || !SlimeFormMod.isSlimeChunkAuraActive(level, pos)) {
+            return;
         }
-        return random.nextInt(bound);
+        cir.setReturnValue(random.nextInt(100) < SlimeFormConfig.get().effectiveSlimeChunkChance()
+                && Mob.checkMobSpawnRules(type, level, spawnReason, pos, random));
     }
 }

@@ -1,7 +1,7 @@
 {
 	"required": true,
 	"package": "io.asy.fragmented.mixin",
-	"compatibilityLevel": "JAVA_21",
+	"compatibilityLevel": "JAVA_25",
 	"mixins": [
 		"SlimeTargetingMixin",
 		"SlimeAllianceMixin",
@@ -14,7 +14,9 @@
 		"SlimeCombatMixin",
 		"MagmaCubeRetaliationMixin",
 		"SlimeFormDoPhaseCollisionMixin",
+		"SlimeMorphSuffocationDebugMixin",
 		"SlimeChunkSpawnRuleMixin",
+		"SlimeMorphDimensionsMixin",
 		"SlimeMorphDamageMixin",
 		"SlimeFormPlayerMixin",
 		"SlimeFormPlayerSoundMixin",
@@ -23,6 +25,8 @@
 		"SlimeBallConsumptionMixin",
 		"SlimePetAttackMixin",
 		"SlimePlayerLifecycleMixin",
+		"SlimeNaturalSpawnMixin",
+		"SlimeFirstJoinSpawnMixin",
 		"SlimeServerConnectionAccessor",
 		"SlimeDisplayMixin",
 		"SlimeItemDisplayMixin",
@@ -34,14 +38,20 @@
 	"client": [
 		"SlimeEntityHighlightGlowMixin",
 		"SlimeEntityHighlightColorMixin",
-		"SlimeMorphCameraMixin",
 		"SlimeMorphItemRendererMixin",
+		"SlimeMorphHotbarMixin",
+		"SlimeMorphClientInputAccess",
+		"SlimeMorphInputMixin",
+		"SlimeMorphCameraMixin",
 		"SlimeRecoveryDebugRendererMixin",
 		"SlimeDeathScreenMixin",
 		"SlimeClientRecoveryMixin",
 		"SlimeSleepingPlayerRendererMixin",
+		"SlimeSleepingAvatarRenderStateMixin",
 		"SlimeSleepingAvatarRendererMixin",
-		"SlimeSleepingAvatarRenderStateMixin"
+		"SlimeMorphRenderStateMixin",
+		"SlimeMorphAvatarRendererMixin",
+		"SlimeMorphRendererMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

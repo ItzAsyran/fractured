@@ -1,16 +1,20 @@
 package io.asy.fragmented.mixin;
 
 import io.asy.fragmented.SlimeFormMod;
+import io.asy.fragmented.SlimeFormPhaseableBlocks;
+import io.asy.fragmented.SlimeFormPhaseDebug;
+import io.asy.fragmented.SlimeFormSounds;
 import io.asy.fragmented.SlimeFormState;
+import io.asy.fragmented.SlimeMorphManager;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.particles.ParticleTypes;
-import net.minecraft.sounds.SoundEvents;
 import net.minecraft.tags.DamageTypeTags;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.damagesource.DamageTypes;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.storage.ValueInput;
 import org.spongepowered.asm.mixin.Mixin;
@@ -28,6 +32,16 @@ public abstract class SlimeFormPlayerMixin {
     private void slimeform$blockDormantDamage(
             ServerLevel level, DamageSource source, float amount,
             CallbackInfoReturnable<Boolean> cir) {
+        if ((Object) this instanceof ServerPlayer player
+                && source.is(DamageTypes.IN_WALL)
+                && SlimeMorphManager.isMorphed(player)
+                && SlimeFormState.isPhaseEnabled(player)
+                && SlimeFormPhaseableBlocks.shouldIgnoreInWallDamage(player)) {
+            SlimeFormPhaseDebug.recordDamage(player, "in_wall", true);
+            cir.setReturnValue(false);
+            return;
+        }
+        SlimeFormPhaseDebug.recordDamage((LivingEntity) (Object) this, source.type().toString(), false);
         if ((Object) this instanceof Player player && SlimeFormMod.isDormant(player)) {
             cir.setReturnValue(false);
         }
@@ -74,9 +88,13 @@ public abstract class SlimeFormPlayerMixin {
         }
     }
 
-    @Inject(method = "knockback", at = @At("HEAD"), cancellable = true)
+    @Inject(
+            method = "knockback(DDDLnet/minecraft/world/damagesource/DamageSource;FZ)V",
+            at = @At("HEAD"),
+            cancellable = true)
     private void slimeform$blockDormantKnockback(
-            double strength, double x, double z, CallbackInfo ci) {
+            double strength, double x, double z,
+            DamageSource source, float amount, boolean flag, CallbackInfo ci) {
         if ((Object) this instanceof Player player && SlimeFormMod.isDormant(player)) {
             ci.cancel();
         }
@@ -95,10 +113,13 @@ public abstract class SlimeFormPlayerMixin {
 
     @Inject(method = "jumpFromGround", at = @At("TAIL"))
     private void slimeform$playSlimeJumpSound(CallbackInfo ci) {
-        if ((Object) this instanceof Player player
-                && SlimeFormState.isActive(player)
-                && !player.level().isClientSide()) {
-            player.playSound(SoundEvents.SLIME_JUMP, 1.0F, 1.0F);
+        if (!((Object) this instanceof Player player) || !SlimeFormSounds.isSlime(player)) {
+            return;
+        }
+        // Player#playSound excludes the player on the server, so the jumping
+        // client plays its own copy and the server broadcasts to everyone else.
+        player.playSound(SlimeFormSounds.jump(player), 1.0F, 1.0F);
+        if (!player.level().isClientSide()) {
             ((ServerLevel) player.level()).sendParticles(
                     ParticleTypes.ITEM_SLIME,
                     player.getX(), player.getY() + 0.25D, player.getZ(),
@@ -109,12 +130,14 @@ public abstract class SlimeFormPlayerMixin {
     @Inject(method = "checkFallDamage", at = @At("HEAD"))
     private void slimeform$playSlimeLandSound(
             double y, boolean onGround, BlockState state, BlockPos pos, CallbackInfo ci) {
-        if ((Object) this instanceof Player player
-                && SlimeFormState.isActive(player)
-                && onGround
-                && player.fallDistance > 0.0D
-                && !player.level().isClientSide()) {
-            player.playSound(SoundEvents.SLIME_SQUISH, 1.0F, 1.0F);
+        if (!((Object) this instanceof Player player)
+                || !SlimeFormSounds.isSlime(player)
+                || !onGround
+                || player.fallDistance <= 0.0D) {
+            return;
+        }
+        player.playSound(SlimeFormSounds.squish(player), 1.0F, 1.0F);
+        if (!player.level().isClientSide()) {
             ((ServerLevel) player.level()).sendParticles(
                     ParticleTypes.ITEM_SLIME,
                     player.getX(), player.getY() + 0.1D, player.getZ(),

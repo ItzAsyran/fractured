@@ -42,12 +42,16 @@ public final class SlimeFormPayloads {
                     ByteBufCodecs.BOOL, DormantDebugPayload::visible,
                     ByteBufCodecs.VAR_INT, DormantDebugPayload::remainingTicks,
                     DormantDebugPayload::new);
+    public static final CustomPacketPayload.Type<MorphTogglePayload> MORPH_TOGGLE_TYPE =
+            new CustomPacketPayload.Type<>(Identifier.fromNamespaceAndPath(
+                    SlimeFormMod.MOD_ID, "slime_morph_toggle"));
+    public static final StreamCodec<ByteBuf, MorphTogglePayload> MORPH_TOGGLE_CODEC =
+            StreamCodec.unit(new MorphTogglePayload());
     public static final CustomPacketPayload.Type<MorphInputPayload> MORPH_INPUT_TYPE =
             new CustomPacketPayload.Type<>(Identifier.fromNamespaceAndPath(
                     SlimeFormMod.MOD_ID, "slime_morph_input"));
     public static final StreamCodec<ByteBuf, MorphInputPayload> MORPH_INPUT_CODEC =
             StreamCodec.composite(
-                    ByteBufCodecs.BOOL, MorphInputPayload::crouch,
                     ByteBufCodecs.BOOL, MorphInputPayload::jump,
                     ByteBufCodecs.BOOL, MorphInputPayload::forward,
                     ByteBufCodecs.BOOL, MorphInputPayload::back,
@@ -64,7 +68,7 @@ public final class SlimeFormPayloads {
                     ByteBufCodecs.VAR_INT, MorphStatePayload::phase,
                     ByteBufCodecs.VAR_INT, MorphStatePayload::remaining,
                     ByteBufCodecs.VAR_INT, MorphStatePayload::total,
-                    ByteBufCodecs.VAR_INT, MorphStatePayload::entityId,
+                    ByteBufCodecs.VAR_INT, MorphStatePayload::size,
                     MorphStatePayload::new);
 
     private SlimeFormPayloads() {
@@ -102,7 +106,14 @@ public final class SlimeFormPayloads {
         }
     }
 
-    public record MorphInputPayload(boolean crouch, boolean jump, boolean forward, boolean back,
+    public record MorphTogglePayload() implements CustomPacketPayload {
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return MORPH_TOGGLE_TYPE;
+        }
+    }
+
+    public record MorphInputPayload(boolean jump, boolean forward, boolean back,
                                     boolean left, boolean right, float yaw, float pitch)
             implements CustomPacketPayload {
         @Override
@@ -111,7 +122,7 @@ public final class SlimeFormPayloads {
         }
     }
 
-    public record MorphStatePayload(int phase, int remaining, int total, int entityId)
+    public record MorphStatePayload(int phase, int remaining, int total, int size)
             implements CustomPacketPayload {
         @Override
         public Type<? extends CustomPacketPayload> type() {
