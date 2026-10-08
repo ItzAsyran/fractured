@@ -6,7 +6,6 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.core.particles.ParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.EntityTypes;
@@ -37,7 +36,10 @@ public final class SlimeFormVisuals {
     private static final Map<UUID, ItemDisplaySession> ITEM_DISPLAY_SESSIONS = new HashMap<>();
     private static final Map<UUID, ServerPlayer> PENDING_DORMANT_REMOVALS = new HashMap<>();
     private static final Map<UUID, Long> AMBIENT_PARTICLE_TICKS = new HashMap<>();
-    private static final double ITEM_DEBUG_AXIS_MARKER_DISTANCE = 0.55D;
+    private static final long ITEM_DISPLAY_BOB_PERIOD_TICKS = 40L;
+    /** Where floating items may sit inside the slime, per slime facing (min/max X, min/max Z). */
+    private static final SafeZone WEST_EAST_SAFE_ZONE = new SafeZone(-0.150D, 0.150D, -0.100D, 0.200D);
+    private static final SafeZone NORTH_SOUTH_SAFE_ZONE = new SafeZone(-0.150D, 0.150D, -0.200D, 0.110D);
     private static final double MIN_HAND_SEPARATION = 0.12D;
     private static final int MAX_HAND_POSITION_ATTEMPTS = 24;
 
@@ -332,9 +334,6 @@ public final class SlimeFormVisuals {
         }
 
         double topY = slime.getY() + slime.getBbHeight();
-        if (SlimeFormConfig.get().itemDebugShowAxes && time % 5L == 0L) {
-            sendItemDebugAxisMarkers(slime, topY);
-        }
         for (DisplaySlot slot : DisplaySlot.values()) {
             UUID displayId = session.displayIds.get(slot);
             if (displayId == null) {
@@ -346,16 +345,11 @@ public final class SlimeFormVisuals {
                 return;
             }
 
-            boolean calibrationProbe = SlimeFormMod.isCalibrationActive() && slot == DisplaySlot.MAINHAND;
-            display.setInvisible(SlimeFormMod.isCalibrationActive() && slot != DisplaySlot.MAINHAND);
+            display.setInvisible(false);
             double phase = slot.ordinal() * Math.PI / 3.0D;
-            double bob = SlimeFormMod.isCalibrationActive()
-                    ? 0.0D
-                    : Math.sin((time * Math.PI * 2.0D / SlimeFormMod.ITEM_DISPLAY_BOB_PERIOD_TICKS) + phase)
-                            * SlimeFormConfig.get().effectiveItemDisplayBobAmplitude();
-            Vec3 anchor = calibrationProbe
-                    ? SlimeFormMod.calibrationPreviewOffset()
-                    : session.offsets.get(slot);
+            double bob = Math.sin((time * Math.PI * 2.0D / ITEM_DISPLAY_BOB_PERIOD_TICKS) + phase)
+                    * SlimeFormConfig.get().effectiveItemDisplayBobAmplitude();
+            Vec3 anchor = session.offsets.get(slot);
             if (anchor == null) {
                 continue;
             }
@@ -387,34 +381,6 @@ public final class SlimeFormVisuals {
                 localX * cos + localZ * sin,
                 0.0D,
                 localZ * cos - localX * sin);
-    }
-
-    private static void sendItemDebugAxisMarkers(Slime slime, double topY) {
-        ServerLevel level = (ServerLevel) slime.level();
-        sendItemDebugAxisMarker(level, slime, topY, ITEM_DEBUG_AXIS_MARKER_DISTANCE, 0.0D, ParticleTypes.FLAME);
-        sendItemDebugAxisMarker(level, slime, topY, -ITEM_DEBUG_AXIS_MARKER_DISTANCE, 0.0D, ParticleTypes.SOUL_FIRE_FLAME);
-        sendItemDebugAxisMarker(level, slime, topY, 0.0D, ITEM_DEBUG_AXIS_MARKER_DISTANCE, ParticleTypes.HAPPY_VILLAGER);
-        sendItemDebugAxisMarker(level, slime, topY, 0.0D, -ITEM_DEBUG_AXIS_MARKER_DISTANCE, ParticleTypes.END_ROD);
-    }
-
-    private static void sendItemDebugAxisMarker(
-            ServerLevel level,
-            Slime slime,
-            double topY,
-            double localX,
-            double localZ,
-            ParticleOptions particle) {
-        Vec3 offset = slimeLocalHorizontalOffset(slime, localX, localZ);
-        level.sendParticles(
-                particle,
-                slime.getX() + offset.x,
-                topY,
-                slime.getZ() + offset.z,
-                1,
-                0.0D,
-                0.0D,
-                0.0D,
-                0.0D);
     }
 
     private static ItemDisplaySession createItemDisplaySession(
@@ -457,12 +423,7 @@ public final class SlimeFormVisuals {
             ServerLevel level, float slimeYaw, Map<DisplaySlot, ItemStack> snapshots) {
         Map<DisplaySlot, Vec3> offsets = new EnumMap<>(DisplaySlot.class);
         boolean northSouth = isNorthSouthAlignment(slimeYaw);
-        SlimeFormMod.CalibrationBounds calibrated = SlimeFormMod.calibrationZone(northSouth);
-        if (calibrated == null) {
-            return offsets;
-        }
-        SafeZone safeZone = new SafeZone(
-                calibrated.minX(), calibrated.maxX(), calibrated.minZ(), calibrated.maxZ());
+        SafeZone safeZone = northSouth ? NORTH_SOUTH_SAFE_ZONE : WEST_EAST_SAFE_ZONE;
         for (DisplaySlot slot : DisplaySlot.values()) {
             if (!snapshots.containsKey(slot)) {
                 continue;

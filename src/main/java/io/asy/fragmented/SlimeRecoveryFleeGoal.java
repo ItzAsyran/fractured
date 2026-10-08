@@ -1,31 +1,36 @@
 package io.asy.fragmented;
 
-import net.minecraft.world.entity.ai.goal.Goal;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.ai.goal.Goal;
 import net.minecraft.world.entity.monster.cubemob.Slime;
-import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.level.pathfinder.Path;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 
-/** Persistent avoidance behavior for size 1 slimes participating in recovery. */
+/**
+ * Size 1 recovery fragments run from hostile mobs that can actually reach them.
+ *
+ * <p>Every fragment picks its own escape route. The goal ends as soon as nothing can reach
+ * the fragment any more (it got far enough away, or squeezed somewhere the mob cannot follow),
+ * so a safe fragment never keeps wandering off.
+ */
 public final class SlimeRecoveryFleeGoal extends Goal {
     private static final int NO_PROGRESS_LIMIT_TICKS = 12;
+    private static final int REPATH_INTERVAL_TICKS = 10;
+    private static final double FLEE_SPEED = 1.2D;
     private final Slime slime;
     private Path fleePath;
     private List<Mob> threats = List.of();
-    private Set<java.util.UUID> threatIds = Set.of();
+    private Set<UUID> threatIds = Set.of();
     private boolean threatsChanged;
-    private long nextThreatCheckTick;
     private long nextRepathTick;
     private Vec3 lastPosition;
     private int noProgressTicks;
-    private int sharedRouteVersion = -1;
-    private int sharedWaypointIndex;
-    private boolean sharedRouteActive;
 
     public SlimeRecoveryFleeGoal(Slime slime) {
         this.slime = slime;
@@ -36,7 +41,7 @@ public final class SlimeRecoveryFleeGoal extends Goal {
 
     @Override
     public boolean canUse() {
-        if (!isEligible() || !refreshThreats(false)) {
+        if (!isEligible() || !refreshThreats()) {
             return false;
         }
         boolean pathReady = requestPath(threatsChanged);
@@ -48,22 +53,18 @@ public final class SlimeRecoveryFleeGoal extends Goal {
 
     @Override
     public boolean canContinueToUse() {
-        if (!isEligible()) {
-            return false;
-        }
-
-        // Release this individual fragment as soon as its own local area is
-        // clear, even if another lineage fragment is still under threat.
-        if (!SlimeFormMod.hasRecoveryFleeThreatNearby(slime)) {
-            return false;
-        }
-        return fleePath != null && !fleePath.isDone();
+        // Stop the moment this fragment is safe, even if a sibling is still being chased.
+        return isEligible()
+                && refreshThreats()
+                && fleePath != null
+                && !fleePath.isDone();
     }
 
     @Override
     public void start() {
+        SlimeFormMod.setRecoveryRegroupStatus(slime, "fleeing");
         slime.setTarget(null);
-        steerAlongPath();
+        SlimeRecoveryMovement.steerAlongPath(slime, fleePath, FLEE_SPEED);
         visualizePath();
         lastPosition = slime.position();
         noProgressTicks = 0;
@@ -73,7 +74,11 @@ public final class SlimeRecoveryFleeGoal extends Goal {
     @Override
     public void tick() {
         slime.setTarget(null);
-        boolean danger = refreshThreats(false);
+        if (!refreshThreats()) {
+            // Safe now. canContinueToUse() ends the goal on the next check.
+            return;
+        }
+
         boolean pathFailed = fleePath == null || fleePath.isDone();
         boolean pathTurnsTowardThreat = fleePath != null
                 && !SlimeFormMod.isRecoveryFleePathSafe(slime, fleePath, threats);
@@ -82,33 +87,26 @@ public final class SlimeRecoveryFleeGoal extends Goal {
         noProgressTicks = madeProgress ? 0 : noProgressTicks + 1;
         lastPosition = slime.position();
 
-        // A safe slime may complete its current path, but must not repath.
-        boolean stalled = noProgressTicks >= NO_PROGRESS_LIMIT_TICKS;
-        if (danger && stalled) {
+        if (noProgressTicks >= NO_PROGRESS_LIMIT_TICKS) {
             // Do not keep feeding the slime the same movement command when
             // navigation has failed to move it through enclosed terrain.
             fleePath = null;
             slime.getNavigation().stop();
-            holdPosition();
+            SlimeRecoveryMovement.hold(slime);
             threatsChanged = false;
             return;
         }
 
-        boolean shouldRepath = danger
-                && (threatsChanged || pathFailed || pathTurnsTowardThreat
-                || (fleePath == null && sharedRouteActive));
-        if (shouldRepath) {
+        if (threatsChanged || pathFailed || pathTurnsTowardThreat) {
             if (pathFailed || pathTurnsTowardThreat) {
                 fleePath = null;
             }
-            boolean pathRequested = requestPath(threatsChanged || pathTurnsTowardThreat);
-            if (pathRequested) {
-                steerAlongPath();
+            if (requestPath(threatsChanged || pathTurnsTowardThreat)) {
                 noProgressTicks = 0;
             }
             threatsChanged = false;
         }
-        steerAlongPath();
+        SlimeRecoveryMovement.steerAlongPath(slime, fleePath, FLEE_SPEED);
         visualizePath();
     }
 
@@ -118,9 +116,7 @@ public final class SlimeRecoveryFleeGoal extends Goal {
         threats = List.of();
         threatIds = Set.of();
         threatsChanged = false;
-        sharedRouteActive = false;
-        slime.getNavigation().stop();
-        ((SlimeMoveControlAccess) slime.getMoveControl()).slimeform$setWantedMovement(0.0D);
+        SlimeRecoveryMovement.stop(slime);
     }
 
     @Override
@@ -135,23 +131,19 @@ public final class SlimeRecoveryFleeGoal extends Goal {
                 && SlimeFormMod.hasRecoveryLineage(slime);
     }
 
-    private boolean refreshThreats(boolean force) {
-        long gameTime = slime.level().getGameTime();
-        if (!force && gameTime < nextThreatCheckTick) {
-            return !threats.isEmpty();
-        }
-
-        List<Mob> currentThreats = getThreats();
-        Set<java.util.UUID> currentThreatIds = new HashSet<>();
-        for (Mob threat : currentThreats) {
-            currentThreatIds.add(threat.getUUID());
-        }
-        threatsChanged = !currentThreatIds.equals(threatIds);
-        threats = currentThreats;
-        threatIds = currentThreatIds;
-        nextThreatCheckTick = gameTime + 10L;
-        if (currentThreats.isEmpty()) {
-            SlimeFormMod.clearRecoveryFleeRoute(slime);
+    /** Re-reads this fragment's reachable threats (cached briefly by the recovery manager). */
+    private boolean refreshThreats() {
+        List<Mob> current = SlimeFormMod.getRecoveryFragmentThreats(slime);
+        if (current != threats) {
+            Set<UUID> currentIds = new HashSet<>();
+            for (Mob threat : current) {
+                currentIds.add(threat.getUUID());
+            }
+            if (!currentIds.equals(threatIds)) {
+                threatsChanged = true;
+            }
+            threats = current;
+            threatIds = currentIds;
         }
         return !threats.isEmpty();
     }
@@ -161,61 +153,12 @@ public final class SlimeRecoveryFleeGoal extends Goal {
         if (!force && gameTime < nextRepathTick) {
             return fleePath != null;
         }
-
-        SlimeFormMod.RecoveryFleePathResult result = SlimeFormMod.getRecoveryFleePath(
-                slime,
-                threats,
-                sharedRouteVersion,
-                sharedWaypointIndex);
-        fleePath = result.path();
-        sharedRouteVersion = result.routeVersion();
-        sharedWaypointIndex = result.waypointIndex();
-        sharedRouteActive = result.routeActive();
-        nextRepathTick = gameTime + 10L;
+        fleePath = SlimeFormMod.findRecoveryFleePath(slime, threats);
+        nextRepathTick = gameTime + REPATH_INTERVAL_TICKS;
         return fleePath != null;
-    }
-
-    private void steerAlongPath() {
-        SlimeMoveControlAccess moveControl = (SlimeMoveControlAccess) slime.getMoveControl();
-        if (fleePath == null || fleePath.isDone()) {
-            moveControl.slimeform$setWantedMovement(0.0D);
-            return;
-        }
-
-        while (!fleePath.isDone()
-                && slime.distanceToSqr(
-                        fleePath.getNextNodePos().getX() + 0.5D,
-                        fleePath.getNextNodePos().getY(),
-                        fleePath.getNextNodePos().getZ() + 0.5D) <= 1.5D) {
-            fleePath.advance();
-        }
-        if (fleePath.isDone()) {
-            moveControl.slimeform$setWantedMovement(0.0D);
-            return;
-        }
-
-        // SlimeMoveControl ignores generic wanted-position coordinates. Use
-        // its native direction and movement commands so the normal slime jump
-        // cycle travels through the calculated path nodes.
-        Vec3 next = Vec3.atCenterOf(fleePath.getNextNodePos());
-        float yaw = (float) Math.toDegrees(Math.atan2(
-                next.z - slime.getZ(),
-                next.x - slime.getX())) - 90.0F;
-        moveControl.slimeform$setDirection(yaw, true);
-        moveControl.slimeform$setWantedMovement(1.2D);
-    }
-
-    private void holdPosition() {
-        SlimeMoveControlAccess moveControl = (SlimeMoveControlAccess) slime.getMoveControl();
-        moveControl.slimeform$setDirection(slime.getYRot(), false);
-        moveControl.slimeform$setWantedMovement(0.0D);
     }
 
     private void visualizePath() {
         SlimeFormMod.visualizeRecoveryFleePath(slime, fleePath, threats);
-    }
-
-    private List<Mob> getThreats() {
-        return SlimeFormMod.getRecoveryFleeThreats(slime);
     }
 }

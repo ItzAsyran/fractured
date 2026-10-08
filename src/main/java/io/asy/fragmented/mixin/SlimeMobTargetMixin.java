@@ -1,5 +1,6 @@
 package io.asy.fragmented.mixin;
 
+import io.asy.fragmented.SlimeDefenseTargetGoal;
 import io.asy.fragmented.SlimeFormMod;
 import io.asy.fragmented.MagmaCubeRetaliationAccess;
 import net.minecraft.world.entity.LivingEntity;
@@ -19,6 +20,25 @@ import java.util.UUID;
 public abstract class SlimeMobTargetMixin {
     @Unique
     private UUID slimeform$lastRejectedTarget;
+
+    @Unique
+    private LivingEntity slimeform$targetBeforeUpdate;
+
+    @Inject(method = "setTarget", at = @At("HEAD"))
+    private void slimeform$capturePreviousTarget(LivingEntity target, CallbackInfo ci) {
+        slimeform$targetBeforeUpdate = ((Mob) (Object) this).getTarget();
+    }
+
+    @Inject(method = "setTarget", at = @At("TAIL"))
+    private void slimeform$notifyDefenseTargetChanged(LivingEntity target, CallbackInfo ci) {
+        Mob mob = (Mob) (Object) this;
+        if (target instanceof Player player
+                && slimeform$targetBeforeUpdate != target
+                && mob.getTarget() == target) {
+            SlimeDefenseTargetGoal.onThreatTargetChanged(mob, player);
+        }
+        slimeform$targetBeforeUpdate = null;
+    }
 
     @Inject(method = "setTarget", at = @At("HEAD"), cancellable = true)
     private void slimeform$rejectSlimeFormPlayer(LivingEntity target, CallbackInfo ci) {

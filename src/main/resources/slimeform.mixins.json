@@ -51,7 +51,9 @@
 		"SlimeSleepingAvatarRendererMixin",
 		"SlimeMorphRenderStateMixin",
 		"SlimeMorphAvatarRendererMixin",
-		"SlimeMorphRendererMixin"
+		"SlimeAppearanceRendererMixin",
+		"SlimeAppearanceAvatarRendererMixin",
+		"SlimeAppearanceArmorRendererMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

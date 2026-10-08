@@ -4,6 +4,7 @@ import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
+import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.VanillaHudElements;
 import net.minecraft.client.Minecraft;
@@ -48,8 +49,11 @@ public final class SlimeFormClient implements ClientModInitializer {
     private static SlimeFormClient instance;
     private static volatile boolean slimeChunksEnabled;
     private static volatile List<SlimeFormPayloads.AuraSource> slimeChunkSources = List.of();
+    private static final Map<Integer, SlimeAppearanceSettings> playerAppearanceSettings = new HashMap<>();
     private final Map<Integer, Boolean> highlightedEntities = new HashMap<>();
     private boolean wakeSent;
+    private boolean recoveryCycleAttackWasDown;
+    private boolean recoveryCycleUseWasDown;
     private int morphPhase;
     private int morphRemaining;
     private int morphTotal;
@@ -88,6 +92,23 @@ public final class SlimeFormClient implements ClientModInitializer {
                     morphTotal = payload.total();
                     morphSize = Math.max(SlimeFormState.MIN_SIZE, payload.size());
                 }));
+        ClientPlayNetworking.registerGlobalReceiver(
+                SlimeFormPayloads.PLAYER_APPEARANCE_STATE_TYPE,
+                (payload, context) -> context.client().execute(() -> {
+                    if (payload.present()) {
+                        playerAppearanceSettings.put(payload.entityId(), new SlimeAppearanceSettings(
+                                payload.transparencyPercent(), payload.slimeTint(), payload.slimeShell()));
+                    } else {
+                        playerAppearanceSettings.remove(payload.entityId());
+                    }
+                }));
+        ClientPlayConnectionEvents.JOIN.register((handler, sender, client) ->
+                client.execute(SlimeFormClient::syncPlayerAppearance));
+        ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {
+            playerAppearanceSettings.clear();
+            slimeChunksEnabled = false;
+            slimeChunkSources = List.of();
+        });
         HudElementRegistry.attachElementAfter(
                 VanillaHudElements.BOSS_BAR,
                 Identifier.fromNamespaceAndPath(SlimeFormMod.MOD_ID, "morph_hud"),
@@ -98,10 +119,35 @@ public final class SlimeFormClient implements ClientModInitializer {
                 this::renderDormantHud);
     }
 
+    /**
+     * While spectating, left click asks the server for the next recovery fragment and right
+     * click for the previous one. The server ignores this unless the player is in a recovery.
+     * Only the moment a button goes down counts, so holding a button cycles once.
+     */
+    private void sendRecoveryCycleInput(Minecraft client) {
+        // No screen check needed: while any screen is open Minecraft releases all key
+        // mappings, so isDown() below is already false.
+        boolean spectating = client.player.isSpectator();
+        boolean attackDown = spectating && client.options.keyAttack.isDown();
+        boolean useDown = spectating && client.options.keyUse.isDown();
+        if (ClientPlayNetworking.canSend(SlimeFormPayloads.RECOVERY_CYCLE_TYPE)) {
+            if (attackDown && !recoveryCycleAttackWasDown) {
+                ClientPlayNetworking.send(new SlimeFormPayloads.RecoveryCyclePayload(true));
+            }
+            if (useDown && !recoveryCycleUseWasDown) {
+                ClientPlayNetworking.send(new SlimeFormPayloads.RecoveryCyclePayload(false));
+            }
+        }
+        recoveryCycleAttackWasDown = attackDown;
+        recoveryCycleUseWasDown = useDown;
+    }
+
     private void tick(Minecraft client) {
         if (client.player == null) {
             clearHighlightedEntities(client);
             wakeSent = false;
+            recoveryCycleAttackWasDown = false;
+            recoveryCycleUseWasDown = false;
             morphPhase = 0;
             morphRemaining = 0;
             morphTotal = 0;
@@ -116,6 +162,7 @@ public final class SlimeFormClient implements ClientModInitializer {
         }
 
         updateHighlightedEntities(client);
+        sendRecoveryCycleInput(client);
 
         SlimeFormConfig config = SlimeFormConfig.get();
         boolean active = SlimeFormState.isClientVisualSlimeForm(client.player);
@@ -166,8 +213,12 @@ public final class SlimeFormClient implements ClientModInitializer {
         return instance != null && instance.morphPhase != 0;
     }
 
+    /**
+     * The real morph body exists (and is controlled) for every non-idle phase,
+     * including ENTERING and RETURNING.
+     */
     public static boolean isLocalMorphBodyActive() {
-        return instance != null && (instance.morphPhase == 2 || instance.morphPhase == 3);
+        return instance != null && instance.morphPhase != 0;
     }
 
     /**
@@ -191,6 +242,27 @@ public final class SlimeFormClient implements ClientModInitializer {
             return instance.morphSize;
         }
         return SlimeFormState.getRiderSize(player);
+    }
+
+    public static SlimeAppearanceSettings getPlayerAppearanceSettings(Player player) {
+        Minecraft client = Minecraft.getInstance();
+        if (player == client.player) {
+            return SlimeAppearanceSettings.fromConfig(SlimeFormConfig.get());
+        }
+        return playerAppearanceSettings.getOrDefault(player.getId(), SlimeAppearanceSettings.DEFAULT);
+    }
+
+    public static void syncPlayerAppearance() {
+        Minecraft client = Minecraft.getInstance();
+        if (client.player == null) {
+            return;
+        }
+        SlimeAppearanceSettings settings = SlimeAppearanceSettings.fromConfig(SlimeFormConfig.get());
+        playerAppearanceSettings.put(client.player.getId(), settings);
+        if (ClientPlayNetworking.canSend(SlimeFormPayloads.PLAYER_APPEARANCE_PREFERENCE_TYPE)) {
+            ClientPlayNetworking.send(new SlimeFormPayloads.PlayerAppearancePreferencePayload(
+                    settings.transparencyPercent(), settings.slimeTint(), settings.slimeShell()));
+        }
     }
 
     public static boolean isClientSlimeChunk(int chunkX, int chunkZ) {

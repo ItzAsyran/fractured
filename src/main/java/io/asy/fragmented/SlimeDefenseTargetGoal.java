@@ -1,5 +1,6 @@
 package io.asy.fragmented;
 
+import io.asy.fragmented.mixin.MobGoalSelectorAccessor;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.entity.EntityReference;
 import net.minecraft.world.entity.LivingEntity;
@@ -25,6 +26,7 @@ public final class SlimeDefenseTargetGoal extends TargetGoal {
     private static final double DEFENSE_RADIUS = 32.0D;
     private static final long TRACKER_EXPIRY_TICKS = 600L;
     private static final Map<UUID, TrackedThreats> TRACKED_THREATS = new HashMap<>();
+    private static boolean DISPATCHING_IMMEDIATE_TARGET;
 
     private final Slime slime;
     private Player defendedPlayer;
@@ -32,6 +34,50 @@ public final class SlimeDefenseTargetGoal extends TargetGoal {
     public SlimeDefenseTargetGoal(Slime slime) {
         super(slime, false);
         this.slime = slime;
+    }
+
+    /** Immediately reruns nearby allied slime target selectors after a hostile acquires the player. */
+    public static void onThreatTargetChanged(Mob threat, Player player) {
+        if (threat.level().isClientSide()
+                || !threat.isAlive()
+                || !player.isAlive()
+                || player.level() != threat.level()
+                || !SlimeFormState.isActive(player)
+                || player.entityTags().contains(SlimeFormMod.SLIME_DORMANT_TAG)) {
+            return;
+        }
+
+        long gameTime = threat.level().getGameTime();
+        TrackedThreats tracker = TRACKED_THREATS.compute(player.getUUID(), (id, existing) ->
+                existing == null || !existing.dimension.equals(threat.level().dimension())
+                        ? new TrackedThreats(threat.level().dimension(), gameTime)
+                        : existing);
+        tracker.lastAccessTick = gameTime;
+        tracker.entityIds.add(threat.getUUID());
+
+        if (DISPATCHING_IMMEDIATE_TARGET) {
+            return;
+        }
+
+        AABB area = player.getBoundingBox().inflate(DEFENSE_RADIUS);
+        List<Slime> defendingSlimes = threat.level().getEntitiesOfClass(Slime.class, area,
+                slime -> slime != threat
+                        && slime.isAlive()
+                        && slime.getSize() > SlimeFormState.MIN_SIZE
+                        && slime.isAlliedTo(player)
+                        && slime.canAttack(threat));
+        if (defendingSlimes.isEmpty()) {
+            return;
+        }
+
+        DISPATCHING_IMMEDIATE_TARGET = true;
+        try {
+            for (Slime slime : defendingSlimes) {
+                ((MobGoalSelectorAccessor) slime).slimeform$getTargetSelector().tick();
+            }
+        } finally {
+            DISPATCHING_IMMEDIATE_TARGET = false;
+        }
     }
 
     @Override

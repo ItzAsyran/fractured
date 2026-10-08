@@ -28,10 +28,8 @@ public abstract class SlimeMorphCameraMixin {
         LocalPlayer player = Minecraft.getInstance().player;
         if (player != null && camera.entity() instanceof Slime
                 && SlimeFormClient.isLocalMorphBodyActive()) {
-            boolean mirror = false;
-            float yRot = player.getViewYRot(partialTick) + (mirror ? 180.0F : 0.0F);
-            float xRot = mirror ? -player.getViewXRot(partialTick) : player.getViewXRot(partialTick);
-            slimeform$setRotation(yRot, xRot);
+            slimeform$setRotation(
+                    player.getViewYRot(partialTick), player.getViewXRot(partialTick));
         }
     }
 
