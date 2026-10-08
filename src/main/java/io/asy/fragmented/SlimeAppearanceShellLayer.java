@@ -20,8 +20,10 @@ import com.mojang.blaze3d.vertex.PoseStack;
  * {@code slime_shell.png} is filled across the whole 64x64 layout, so every face is covered.
  */
 public final class SlimeAppearanceShellLayer extends RenderLayer<AvatarRenderState, PlayerModel> {
-    private static final Identifier SHELL_TEXTURE = Identifier.fromNamespaceAndPath(
+    static final Identifier SHELL_TEXTURE = Identifier.fromNamespaceAndPath(
             SlimeFormMod.MOD_ID, "textures/entity/slime_shell.png");
+    /** The shell is drawn this much larger than the player model so it wraps the skin. */
+    static final float SHELL_SCALE = 1.035F;
 
     public SlimeAppearanceShellLayer(RenderLayerParent<AvatarRenderState, PlayerModel> parent) {
         super(parent);
@@ -43,7 +45,7 @@ public final class SlimeAppearanceShellLayer extends RenderLayer<AvatarRenderSta
         }
 
         poseStack.pushPose();
-        poseStack.scale(1.035F, 1.035F, 1.035F);
+        poseStack.scale(SHELL_SCALE, SHELL_SCALE, SHELL_SCALE);
         collector.order(1).submitModel(
                 getParentModel(),
                 state,

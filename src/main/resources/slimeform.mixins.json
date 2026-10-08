@@ -53,7 +53,9 @@
 		"SlimeMorphAvatarRendererMixin",
 		"SlimeAppearanceRendererMixin",
 		"SlimeAppearanceAvatarRendererMixin",
-		"SlimeAppearanceArmorRendererMixin"
+		"SlimeAppearanceArmorRendererMixin",
+		"SlimeAppearanceHandContextMixin",
+		"SlimeAppearanceHandRendererMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1
