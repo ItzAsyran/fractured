@@ -70,6 +70,26 @@ public final class SlimeFormPayloads {
                     ByteBufCodecs.VAR_INT, MorphStatePayload::total,
                     ByteBufCodecs.VAR_INT, MorphStatePayload::size,
                     MorphStatePayload::new);
+    public static final CustomPacketPayload.Type<PlayerAppearancePreferencePayload>
+            PLAYER_APPEARANCE_PREFERENCE_TYPE = new CustomPacketPayload.Type<>(
+                    Identifier.fromNamespaceAndPath(SlimeFormMod.MOD_ID, "player_appearance_preference"));
+    public static final StreamCodec<ByteBuf, PlayerAppearancePreferencePayload>
+            PLAYER_APPEARANCE_PREFERENCE_CODEC = StreamCodec.composite(
+                    ByteBufCodecs.VAR_INT, PlayerAppearancePreferencePayload::transparencyPercent,
+                    ByteBufCodecs.BOOL, PlayerAppearancePreferencePayload::slimeTint,
+                    ByteBufCodecs.BOOL, PlayerAppearancePreferencePayload::slimeShell,
+                    PlayerAppearancePreferencePayload::new);
+    public static final CustomPacketPayload.Type<PlayerAppearanceStatePayload>
+            PLAYER_APPEARANCE_STATE_TYPE = new CustomPacketPayload.Type<>(
+                    Identifier.fromNamespaceAndPath(SlimeFormMod.MOD_ID, "player_appearance_state"));
+    public static final StreamCodec<ByteBuf, PlayerAppearanceStatePayload> PLAYER_APPEARANCE_STATE_CODEC =
+            StreamCodec.composite(
+                    ByteBufCodecs.VAR_INT, PlayerAppearanceStatePayload::entityId,
+                    ByteBufCodecs.BOOL, PlayerAppearanceStatePayload::present,
+                    ByteBufCodecs.VAR_INT, PlayerAppearanceStatePayload::transparencyPercent,
+                    ByteBufCodecs.BOOL, PlayerAppearanceStatePayload::slimeTint,
+                    ByteBufCodecs.BOOL, PlayerAppearanceStatePayload::slimeShell,
+                    PlayerAppearanceStatePayload::new);
 
     private SlimeFormPayloads() {
     }
@@ -127,6 +147,23 @@ public final class SlimeFormPayloads {
         @Override
         public Type<? extends CustomPacketPayload> type() {
             return MORPH_STATE_TYPE;
+        }
+    }
+
+    public record PlayerAppearancePreferencePayload(
+            int transparencyPercent, boolean slimeTint, boolean slimeShell) implements CustomPacketPayload {
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return PLAYER_APPEARANCE_PREFERENCE_TYPE;
+        }
+    }
+
+    public record PlayerAppearanceStatePayload(
+            int entityId, boolean present, int transparencyPercent, boolean slimeTint, boolean slimeShell)
+            implements CustomPacketPayload {
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return PLAYER_APPEARANCE_STATE_TYPE;
         }
     }
 }

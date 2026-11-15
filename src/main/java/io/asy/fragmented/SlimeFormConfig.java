@@ -35,6 +35,8 @@ public class SlimeFormConfig implements me.shedaniel.autoconfig.ConfigData {
     public static final double MAX_ITEM_DISPLAY_ROTATION = 360.0D;
     public static final double MIN_ITEM_DISPLAY_BOB = 0.0D;
     public static final double MAX_ITEM_DISPLAY_BOB = 1.0D;
+    public static final int MIN_PLAYER_TRANSPARENCY = 0;
+    public static final int MAX_PLAYER_TRANSPARENCY = 100;
 
     @ConfigEntry.Gui.Tooltip
     public int maxSlimeSize = 5;
@@ -134,6 +136,16 @@ public class SlimeFormConfig implements me.shedaniel.autoconfig.ConfigData {
     public boolean swampSpawnEnabled = false;
 
     @ConfigEntry.Gui.Tooltip
+    @ConfigEntry.BoundedDiscrete(min = MIN_PLAYER_TRANSPARENCY, max = MAX_PLAYER_TRANSPARENCY)
+    public int playerTransparencyPercent = 0;
+
+    @ConfigEntry.Gui.Tooltip
+    public boolean playerTransparencySlimeTint = false;
+
+    @ConfigEntry.Gui.Tooltip
+    public boolean playerTransparencySlimeShell = false;
+
+    @ConfigEntry.Gui.Tooltip
     @ConfigEntry.BoundedDiscrete(min = 1, max = 10)
     public int slimeMorphTransformSeconds = 2;
 
@@ -209,6 +221,10 @@ public class SlimeFormConfig implements me.shedaniel.autoconfig.ConfigData {
 
     public int effectiveSlimeMorphExitTicks() {
         return Math.max(1, slimeMorphExitSeconds) * 20;
+    }
+
+    public int effectivePlayerTransparencyPercent() {
+        return clamp(playerTransparencyPercent, MIN_PLAYER_TRANSPARENCY, MAX_PLAYER_TRANSPARENCY);
     }
 
     public double effectiveRiderOffsetX() {

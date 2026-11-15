@@ -17,7 +17,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(AbstractCubeMob.class)
 public abstract class SlimeCombatMixin {
     @Shadow
-    protected abstract boolean isDealsDamage();
+    protected abstract boolean canDealDamage();
 
     @Shadow
     protected abstract void dealDamage(LivingEntity target);
@@ -45,7 +45,7 @@ public abstract class SlimeCombatMixin {
         }
 
         Slime slime = (Slime) (Object) this;
-        if (slime.level().isClientSide() || !isDealsDamage()) {
+        if (slime.level().isClientSide() || !canDealDamage()) {
             return;
         }
 

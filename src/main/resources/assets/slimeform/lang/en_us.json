@@ -109,6 +109,13 @@
   "config.slimeform.swamp_spawn_enabled": "Swamp Spawning",
   "config.slimeform.swamp_spawn_enabled.tooltip": "Spawn in the nearest swamp if you have no bed or anchor.",
 
+  "config.slimeform.player_transparency": "Player Transparency (%)",
+  "config.slimeform.player_transparency.tooltip": "Transparency of your Slime Form avatar. In slime shell mode, this fades the outer shell while keeping you opaque.",
+  "config.slimeform.player_transparency_slime_tint": "Slime Tint",
+  "config.slimeform.player_transparency_slime_tint.tooltip": "Tint your transparent avatar green. The slime shell uses its own texture instead.",
+  "config.slimeform.player_transparency_slime_shell": "Slime Outer Shell",
+  "config.slimeform.player_transparency_slime_shell.tooltip": "Keep your avatar opaque and cover it with a translucent, avatar-shaped slime layer.",
+
   "key.slimeform.highlight_nearby": "Highlight Aura Entities",
   "key.slimeform.morph": "Toggle Slime Morph",
   "key.categories.slimeform.controls": "SlimeForm"

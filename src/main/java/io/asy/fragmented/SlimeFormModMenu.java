@@ -21,7 +21,10 @@ public class SlimeFormModMenu implements ModMenuApi {
         ConfigBuilder builder = ConfigBuilder.create()
                 .setParentScreen(parent)
                 .setTitle(Component.translatable("config.slimeform.title"))
-                .setSavingRunnable(SlimeFormConfig::save);
+                .setSavingRunnable(() -> {
+                    SlimeFormConfig.save();
+                    SlimeFormClient.syncPlayerAppearance();
+                });
         ConfigEntryBuilder entries = builder.entryBuilder();
 
         ConfigCategory slimeForm = builder.getOrCreateCategory(
@@ -101,6 +104,15 @@ public class SlimeFormModMenu implements ModMenuApi {
                 value -> config.slimeMorphEnabled = value);
         addToggle(experimental, entries, "swamp_spawn_enabled", config.swampSpawnEnabled,
                 value -> config.swampSpawnEnabled = value);
+        addIntSlider(experimental, entries, "player_transparency", config.playerTransparencyPercent,
+                SlimeFormConfig.MIN_PLAYER_TRANSPARENCY, SlimeFormConfig.MAX_PLAYER_TRANSPARENCY,
+                value -> config.playerTransparencyPercent = value, 0);
+        addToggle(experimental, entries, "player_transparency_slime_tint",
+                config.playerTransparencySlimeTint,
+                value -> config.playerTransparencySlimeTint = value);
+        addToggle(experimental, entries, "player_transparency_slime_shell",
+                config.playerTransparencySlimeShell,
+                value -> config.playerTransparencySlimeShell = value);
         addIntSlider(experimental, entries, "slime_morph_transform_seconds",
                 config.slimeMorphTransformSeconds, 1, 10,
                 value -> config.slimeMorphTransformSeconds = value, 2);

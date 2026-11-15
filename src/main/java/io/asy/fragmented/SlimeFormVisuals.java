@@ -292,7 +292,7 @@ public final class SlimeFormVisuals {
         if (dormant) {
             slime.addTag(SlimeFormMod.PLAYER_DORMANT_SLIME_TAG);
         }
-        slime.setInvulnerable(true);
+        slime.setPermanentlyInvulnerable(true);
         slime.setNoAi(!dormant);
         slime.setNoGravity(!dormant);
         slime.setSilent(true);
@@ -553,7 +553,7 @@ public final class SlimeFormVisuals {
             return;
         }
         display.addTag(itemDisplayTag(player, slot.tagName));
-        display.setInvulnerable(true);
+        display.setPermanentlyInvulnerable(true);
         display.getSlot(0).set(stack.copy());
         ((SlimeItemDisplayAccess) display).slimeform$setItemTransform(ItemDisplayContext.GROUND);
         display.setPos(slime.getX(), slime.getY() + slime.getBbHeight(), slime.getZ());

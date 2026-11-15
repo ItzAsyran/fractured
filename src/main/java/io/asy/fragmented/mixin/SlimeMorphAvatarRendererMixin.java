@@ -1,7 +1,10 @@
 package io.asy.fragmented.mixin;
 
 import io.asy.fragmented.SlimeFormClient;
+import io.asy.fragmented.SlimeAppearanceRenderStateAccess;
+import io.asy.fragmented.SlimeAppearanceSettings;
 import io.asy.fragmented.SlimeMorphRenderStateAccess;
+import io.asy.fragmented.SlimeFormState;
 import net.minecraft.client.renderer.entity.player.AvatarRenderer;
 import net.minecraft.client.renderer.entity.state.AvatarRenderState;
 import net.minecraft.world.entity.Avatar;
@@ -31,6 +34,13 @@ public abstract class SlimeMorphAvatarRendererMixin {
             boolean morphed = SlimeFormClient.isClientMorphVisible(player);
             morphState.slimeform$setMorphed(morphed);
             morphState.slimeform$setSize(SlimeFormClient.getClientMorphSize(player));
+
+            SlimeAppearanceSettings appearance = SlimeFormClient.getPlayerAppearanceSettings(player);
+            ((SlimeAppearanceRenderStateAccess) state).slimeform$setAppearance(
+                    SlimeFormState.isClientVisualSlimeForm(player),
+                    appearance.transparencyPercent(),
+                    appearance.slimeTint(),
+                    appearance.slimeShell());
 
             // LivingEntityRenderer uses these render-state flags to skip the
             // player model. The state is still submitted afterward so vanilla

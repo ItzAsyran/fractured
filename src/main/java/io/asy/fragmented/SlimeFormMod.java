@@ -217,6 +217,12 @@ public class SlimeFormMod implements ModInitializer {
         PayloadTypeRegistry.clientboundPlay().register(
                 SlimeFormPayloads.MORPH_STATE_TYPE,
                 SlimeFormPayloads.MORPH_STATE_CODEC);
+        PayloadTypeRegistry.serverboundPlay().register(
+                SlimeFormPayloads.PLAYER_APPEARANCE_PREFERENCE_TYPE,
+                SlimeFormPayloads.PLAYER_APPEARANCE_PREFERENCE_CODEC);
+        PayloadTypeRegistry.clientboundPlay().register(
+                SlimeFormPayloads.PLAYER_APPEARANCE_STATE_TYPE,
+                SlimeFormPayloads.PLAYER_APPEARANCE_STATE_CODEC);
         ServerPlayNetworking.registerGlobalReceiver(
                 SlimeFormPayloads.WAKE_DORMANT_TYPE,
                 (payload, context) -> wakeDormant(context.player()));
@@ -226,6 +232,11 @@ public class SlimeFormMod implements ModInitializer {
         ServerPlayNetworking.registerGlobalReceiver(
                 SlimeFormPayloads.MORPH_INPUT_TYPE,
                 (payload, context) -> SlimeMorphManager.handleInput(context.player(), payload));
+        ServerPlayNetworking.registerGlobalReceiver(
+                SlimeFormPayloads.PLAYER_APPEARANCE_PREFERENCE_TYPE,
+                (payload, context) -> context.server().execute(
+                        () -> SlimeAppearanceServerState.update(context.player(), payload)));
+        SlimeAppearanceServerState.registerTrackingEvents();
         LOGGER.info("Sliming.");
 
         ServerTickEvents.END_SERVER_TICK.register(server -> {
@@ -250,6 +261,7 @@ public class SlimeFormMod implements ModInitializer {
             ServerPlayNetworking.send(player,
                     new SlimeFormPayloads.PhaseStatePayload(SlimeFormConfig.get().doPhaseEnabled));
             ServerPlayNetworking.send(player, currentSlimeChunksState(server));
+            SlimeAppearanceServerState.sendSnapshot(player);
             ACTIVITY_TICKS.put(player.getUUID(), player.level().getGameTime());
             ACTIVITY_POSITIONS.put(player.getUUID(), player.position());
             LOGGER.info("[slimeform] Joined {}: active={}, size={}, maxHealth={}, health={}",
@@ -261,6 +273,7 @@ public class SlimeFormMod implements ModInitializer {
         });
         ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> {
             ServerPlayer player = handler.getPlayer();
+            SlimeAppearanceServerState.remove(player);
             SlimeRiderScale.clear(player);
             SlimeMorphManager.stop(player);
             clearCalibrationFor(player);

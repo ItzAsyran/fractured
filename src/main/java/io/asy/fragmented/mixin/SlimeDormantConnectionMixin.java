@@ -7,7 +7,7 @@ import net.minecraft.network.protocol.game.ServerboundChatPacket;
 import net.minecraft.network.protocol.game.ServerboundPlayerCommandPacket;
 import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
 import net.minecraft.network.protocol.game.ServerboundSetCarriedItemPacket;
-import net.minecraft.network.protocol.game.ServerboundSwingPacket;
+import net.minecraft.network.protocol.game.ServerboundPunchPacket;
 import net.minecraft.network.protocol.game.ServerboundUseItemOnPacket;
 import net.minecraft.network.protocol.game.ServerboundUseItemPacket;
 import net.minecraft.server.level.ServerPlayer;
@@ -65,8 +65,8 @@ public abstract class SlimeDormantConnectionMixin {
         }
     }
 
-    @Inject(method = "handleAnimate", at = @At("HEAD"), cancellable = true)
-    private void slimeform$animate(ServerboundSwingPacket packet, CallbackInfo ci) {
+    @Inject(method = "handlePunch", at = @At("HEAD"), cancellable = true)
+    private void slimeform$animate(ServerboundPunchPacket packet, CallbackInfo ci) {
         if (!slimeform$blockIfDormant(ci)) {
             SlimeFormMod.recordActivity(((SlimeServerConnectionAccessor) this).slimeform$getPlayer());
         }

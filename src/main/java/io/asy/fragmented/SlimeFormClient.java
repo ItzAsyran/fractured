@@ -4,6 +4,7 @@ import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
+import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.VanillaHudElements;
 import net.minecraft.client.Minecraft;
@@ -16,7 +17,6 @@ import net.minecraft.world.entity.monster.Enemy;
 import net.minecraft.world.entity.monster.cubemob.Slime;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.AABB;
-import org.lwjgl.glfw.GLFW;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 
@@ -36,18 +36,19 @@ public final class SlimeFormClient implements ClientModInitializer {
     private static final KeyMapping HIGHLIGHT_SLIMES_KEY = KeyMappingHelper.registerKeyMapping(
             new KeyMapping(
                     "key.slimeform.highlight_nearby",
-                    InputConstants.Type.KEYSYM,
-                    GLFW.GLFW_KEY_G,
+                    InputConstants.Type.KEYBOARD,
+                    InputConstants.KEY_G,
                     CONTROLS_CATEGORY));
     public static final KeyMapping MORPH_KEY = KeyMappingHelper.registerKeyMapping(
             new KeyMapping(
                     "key.slimeform.morph",
-                    InputConstants.Type.KEYSYM,
-                    GLFW.GLFW_KEY_H,
+                    InputConstants.Type.KEYBOARD,
+                    InputConstants.KEY_H,
                     CONTROLS_CATEGORY));
     private static SlimeFormClient instance;
     private static volatile boolean slimeChunksEnabled;
     private static volatile List<SlimeFormPayloads.AuraSource> slimeChunkSources = List.of();
+    private static final Map<Integer, SlimeAppearanceSettings> playerAppearanceSettings = new HashMap<>();
     private final Map<Integer, Boolean> highlightedEntities = new HashMap<>();
     private boolean wakeSent;
     private int morphPhase;
@@ -88,6 +89,23 @@ public final class SlimeFormClient implements ClientModInitializer {
                     morphTotal = payload.total();
                     morphSize = Math.max(SlimeFormState.MIN_SIZE, payload.size());
                 }));
+        ClientPlayNetworking.registerGlobalReceiver(
+                SlimeFormPayloads.PLAYER_APPEARANCE_STATE_TYPE,
+                (payload, context) -> context.client().execute(() -> {
+                    if (payload.present()) {
+                        playerAppearanceSettings.put(payload.entityId(), new SlimeAppearanceSettings(
+                                payload.transparencyPercent(), payload.slimeTint(), payload.slimeShell()));
+                    } else {
+                        playerAppearanceSettings.remove(payload.entityId());
+                    }
+                }));
+        ClientPlayConnectionEvents.JOIN.register((handler, sender, client) ->
+                client.execute(SlimeFormClient::syncPlayerAppearance));
+        ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {
+            playerAppearanceSettings.clear();
+            slimeChunksEnabled = false;
+            slimeChunkSources = List.of();
+        });
         HudElementRegistry.attachElementAfter(
                 VanillaHudElements.BOSS_BAR,
                 Identifier.fromNamespaceAndPath(SlimeFormMod.MOD_ID, "morph_hud"),
@@ -191,6 +209,27 @@ public final class SlimeFormClient implements ClientModInitializer {
             return instance.morphSize;
         }
         return SlimeFormState.getRiderSize(player);
+    }
+
+    public static SlimeAppearanceSettings getPlayerAppearanceSettings(Player player) {
+        Minecraft client = Minecraft.getInstance();
+        if (player == client.player) {
+            return SlimeAppearanceSettings.fromConfig(SlimeFormConfig.get());
+        }
+        return playerAppearanceSettings.getOrDefault(player.getId(), SlimeAppearanceSettings.DEFAULT);
+    }
+
+    public static void syncPlayerAppearance() {
+        Minecraft client = Minecraft.getInstance();
+        if (client.player == null) {
+            return;
+        }
+        SlimeAppearanceSettings settings = SlimeAppearanceSettings.fromConfig(SlimeFormConfig.get());
+        playerAppearanceSettings.put(client.player.getId(), settings);
+        if (ClientPlayNetworking.canSend(SlimeFormPayloads.PLAYER_APPEARANCE_PREFERENCE_TYPE)) {
+            ClientPlayNetworking.send(new SlimeFormPayloads.PlayerAppearancePreferencePayload(
+                    settings.transparencyPercent(), settings.slimeTint(), settings.slimeShell()));
+        }
     }
 
     public static boolean isClientSlimeChunk(int chunkX, int chunkZ) {

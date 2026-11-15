@@ -206,6 +206,13 @@ public final class SlimeMorphManager {
         player.setPos(body.position());
         player.noPhysics = true;
 
+        // The morph body has its vanilla goals cleared, including
+        // AbstractCubeMob.CubeMobFloatGoal. Preserve that goal's buoyancy
+        // behavior so a controlled slime keeps jumping toward the surface.
+        if ((body.isInWater() || body.isInLava()) && body.getRandom().nextFloat() < 0.8F) {
+            body.getJumpControl().jump();
+        }
+
         double strafe = (input.right() ? 1.0D : 0.0D) - (input.left() ? 1.0D : 0.0D);
         double forward = (input.forward() ? 1.0D : 0.0D) - (input.back() ? 1.0D : 0.0D);
         double length = Math.sqrt(strafe * strafe + forward * forward);
