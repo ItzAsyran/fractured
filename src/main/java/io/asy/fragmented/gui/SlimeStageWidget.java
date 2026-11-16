@@ -10,12 +10,14 @@ import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.renderer.entity.EntityRenderDispatcher;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
+import net.minecraft.client.renderer.entity.state.HumanoidRenderState;
 import net.minecraft.client.renderer.entity.state.LivingEntityRenderState;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Pose;
 import net.minecraft.world.entity.monster.cubemob.Slime;
 import net.minecraft.world.level.Level;
 import org.joml.Quaternionf;
@@ -113,6 +115,7 @@ public class SlimeStageWidget extends AbstractWidget {
             float scale,
             float xOffset, float yOffset, float zOffset,
             float bodyYaw,
+            boolean isPassenger,
             T entity) {
         if (entity == null) {
             return;
@@ -124,10 +127,17 @@ public class SlimeStageWidget extends AbstractWidget {
         renderState.shadowPieces.clear();
         renderState.outlineColor = 0;
 
+        if (renderState instanceof HumanoidRenderState humanoidState) {
+            humanoidState.isPassenger = isPassenger;
+        }
+
         if (renderState instanceof LivingEntityRenderState livingState) {
             livingState.bodyRot = bodyYaw;
             livingState.yRot = bodyYaw;
             livingState.xRot = 0.0F;
+            if (isPassenger) {
+                livingState.pose = Pose.SITTING;
+            }
             if (livingState.scale > 0.0F) {
                 livingState.boundingBoxWidth /= livingState.scale;
                 livingState.boundingBoxHeight /= livingState.scale;
@@ -140,10 +150,17 @@ public class SlimeStageWidget extends AbstractWidget {
         cameraRot.rotateX(rotX * ((float) Math.PI / 180.0F));
         cameraRot.rotateY(rotY * ((float) Math.PI / 180.0F));
 
+        // Transform local (xOffset, zOffset) by camera yaw so the rider orbits with the slime in 3D
+        float radY = (float) Math.toRadians(rotY);
+        float cosY = (float) Math.cos(radY);
+        float sinY = (float) Math.sin(radY);
+        float transformedX = xOffset * cosY - zOffset * sinY;
+        float transformedZ = xOffset * sinY + zOffset * cosY;
+
         Vector3f pos = new Vector3f(
-                xOffset,
+                transformedX,
                 renderState.boundingBoxHeight / 2.0F + yOffset,
-                zOffset);
+                transformedZ);
 
         graphics.entity(renderState, scale, pos, cameraRot, null, x1, y1, x2, y2);
     }
@@ -186,7 +203,7 @@ public class SlimeStageWidget extends AbstractWidget {
                 switch (mode) {
                     case AVATAR_SHADERS -> {
                         float scale = 48.0F * zoom;
-                        renderEntityOnStage(graphics, x1, y1, x2, y2, scale, 0.0F, 0.0F, 0.0F, 180.0F, client.player);
+                        renderEntityOnStage(graphics, x1, y1, x2, y2, scale, 0.0F, 0.0F, 0.0F, 180.0F, false, client.player);
                     }
                     case SLIME_SCALE -> {
                         Slime slime = getOrCreateSlime(client.level);
@@ -194,25 +211,30 @@ public class SlimeStageWidget extends AbstractWidget {
                             int size = customSlimeSize != null ? Math.max(1, customSlimeSize) : Math.max(1, config.effectiveMaxSlimeSize());
                             slime.setSize(size, false);
                             float scale = (22.0F + size * 5.0F) * zoom;
-                            renderEntityOnStage(graphics, x1, y1, x2, y2, scale, 0.0F, 0.0F, 0.0F, 180.0F, slime);
+                            renderEntityOnStage(graphics, x1, y1, x2, y2, scale, 0.0F, 0.0F, 0.0F, 180.0F, false, slime);
                         }
                     }
                     case MOUNTED_RIDER -> {
                         Slime slime = getOrCreateSlime(client.level);
                         if (slime != null) {
-                            slime.setSize(2, false);
-                            float baseScale = 36.0F * zoom;
+                            int slimeSize = 2;
+                            slime.setSize(slimeSize, false);
+                            float baseScale = 40.0F * zoom;
 
-                            // 1. Render Slime entity
-                            renderEntityOnStage(graphics, x1, y1, x2, y2, baseScale, 0.0F, 0.0F, 0.0F, 180.0F, slime);
+                            // Slime centered slightly lower in the viewport
+                            float slimeYShift = -0.32F;
+                            renderEntityOnStage(graphics, x1, y1, x2, y2, baseScale, 0.0F, slimeYShift, 0.0F, 180.0F, false, slime);
 
-                            // 2. Render Player riding atop the slime with interactive rider offsets
-                            float riderX = (float) (config.effectiveRiderOffsetX() * 0.4D);
-                            float riderY = (float) (slime.getBbHeight() * 0.7D + config.effectiveRiderOffsetYPerSize() * 0.35D);
-                            float riderZ = (float) (config.effectiveRiderOffsetZ() * 0.4D);
-                            float playerScale = baseScale * 0.85F;
+                            // Player sitting atop the slime matching SlimeRiderScale (0.40 scale for size 2)
+                            float riderScale = 0.40F;
+                            float playerScale = baseScale * riderScale;
 
-                            renderEntityOnStage(graphics, x1, y1, x2, y2, playerScale, riderX, riderY, riderZ, 180.0F, client.player);
+                            // Offset positioning so the sitting legs and hips rest on top of the size 2 slime cube
+                            float riderOffsetX = (float) (config.effectiveRiderOffsetX() * 0.25D);
+                            float riderOffsetY = slimeYShift + 0.50F + (float) (config.effectiveRiderOffsetYPerSize() * 0.20D);
+                            float riderOffsetZ = (float) (config.effectiveRiderOffsetZ() * 0.25D);
+
+                            renderEntityOnStage(graphics, x1, y1, x2, y2, playerScale, riderOffsetX, riderOffsetY, riderOffsetZ, 180.0F, true, client.player);
                         }
                     }
                     case FLOATING_ITEMS -> {
@@ -220,7 +242,7 @@ public class SlimeStageWidget extends AbstractWidget {
                         if (slime != null) {
                             slime.setSize(2, false);
                             float scale = 42.0F * zoom;
-                            renderEntityOnStage(graphics, x1, y1, x2, y2, scale, 0.0F, 0.0F, 0.0F, 180.0F, slime);
+                            renderEntityOnStage(graphics, x1, y1, x2, y2, scale, 0.0F, 0.0F, 0.0F, 180.0F, false, slime);
                         }
                     }
                     case RECOVERY_RING -> {
@@ -228,7 +250,7 @@ public class SlimeStageWidget extends AbstractWidget {
                         if (slime != null) {
                             slime.setSize(1, false);
                             float scale = 50.0F * zoom;
-                            renderEntityOnStage(graphics, x1, y1, x2, y2, scale, 0.0F, 0.0F, 0.0F, 180.0F, slime);
+                            renderEntityOnStage(graphics, x1, y1, x2, y2, scale, 0.0F, 0.0F, 0.0F, 180.0F, false, slime);
                         }
                     }
                 }
