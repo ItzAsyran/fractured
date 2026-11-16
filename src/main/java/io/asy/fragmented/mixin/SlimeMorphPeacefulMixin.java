@@ -22,7 +22,7 @@ public abstract class SlimeMorphPeacefulMixin {
     @Inject(method = "shouldDespawnInPeaceful", at = @At("HEAD"), cancellable = true, require = 0)
     private void slimeform$morphBodyStaysInPeaceful(CallbackInfoReturnable<Boolean> cir) {
         Slime self = (Slime) (Object) this;
-        boolean protectedBody = SlimeMorphManager.isProtectedFromPeacefulDespawn(self);
+        boolean protectedBody = SlimeMorphManager.shouldBlockPeacefulRemoval(self);
         if (SlimeMorphManager.isMorphBody(self) && slimeform$debugCalls < 10) {
             slimeform$debugCalls++;
             SlimeFormMod.LOGGER.info("[slimeform-debug] shouldDespawnInPeaceful hook called for morph body: protected={}", protectedBody);

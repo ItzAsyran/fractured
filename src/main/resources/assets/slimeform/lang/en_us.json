@@ -27,10 +27,10 @@
 
   "config.slimeform.split_duration": "Split Duration (Seconds)",
   "config.slimeform.split_duration.tooltip": "Time before a split slime reforms.",
-  "config.slimeform.recovery_reform_safety_radius": "Reform Safety Radius",
-  "config.slimeform.recovery_reform_safety_radius.tooltip": "How close hostiles can be before reforming is blocked.",
   "config.slimeform.recovery_hostile_reform_block": "Block Reform Near Hostiles",
-  "config.slimeform.recovery_hostile_reform_block.tooltip": "Stop size-1 reforming when hostiles are nearby.",
+  "config.slimeform.recovery_hostile_reform_block.tooltip": "Stop size-1 reforming while a fragment is in danger: a hostile can reach it, or one is within a few blocks.",
+  "config.slimeform.recovery_reform_cost": "Reform Cost",
+  "config.slimeform.recovery_reform_cost.tooltip": "You reform as big as the slime you gathered. Lost fragments make you come back smaller, never bigger than before you died.",
 
   "config.slimeform.recovery_flee_path_debug": "Flee Path Debug",
   "config.slimeform.recovery_flee_path_debug.tooltip": "Show the flee path and nearby hostiles.",
@@ -93,8 +93,6 @@
   "config.slimeform.item_display_rotation_z.tooltip": "Z rotation in degrees.",
   "config.slimeform.item_display_bob_amplitude": "Item Bob Amount",
   "config.slimeform.item_display_bob_amplitude.tooltip": "How much items bob up and down.",
-  "config.slimeform.item_debug_show_axes": "Show Item Axes",
-  "config.slimeform.item_debug_show_axes.tooltip": "Show particles marking item axes.",
 
   "config.slimeform.visuals.main_hand_offset": "Main-Hand Offset",
   "config.slimeform.visuals.off_hand_offset": "Off-Hand Offset",

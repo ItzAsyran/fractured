@@ -1,5 +1,6 @@
 package io.asy.fragmented.mixin;
 
+import io.asy.fragmented.SlimeFormEntities;
 import io.asy.fragmented.SlimeFormMod;
 import io.asy.fragmented.SlimeFormConfig;
 import io.asy.fragmented.SlimeFormState;
@@ -124,10 +125,7 @@ public abstract class SlimePlayerLifecycleMixin {
         ServerLevel level = player.level();
         List<Slime> splitSlimes = new java.util.ArrayList<>();
         for (int index = 0; index < count; index++) {
-            Slime slime = EntityTypes.SLIME.create(level, EntitySpawnReason.TRIGGERED);
-            if (slime == null) {
-                continue;
-            }
+            Slime slime = SlimeFormEntities.createSlime(level);
             double angle = (Math.PI * 2.0D * index) / count;
             slime.setSize(size, true);
             SlimeFormMod.assignRecoveryLineage(slime, recoveryLineage, null, 1);

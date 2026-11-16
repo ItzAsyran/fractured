@@ -47,6 +47,11 @@ public final class SlimeFormPayloads {
                     SlimeFormMod.MOD_ID, "slime_morph_toggle"));
     public static final StreamCodec<ByteBuf, MorphTogglePayload> MORPH_TOGGLE_CODEC =
             StreamCodec.unit(new MorphTogglePayload());
+    public static final CustomPacketPayload.Type<RecoveryCyclePayload> RECOVERY_CYCLE_TYPE =
+            new CustomPacketPayload.Type<>(Identifier.fromNamespaceAndPath(
+                    SlimeFormMod.MOD_ID, "recovery_cycle"));
+    public static final StreamCodec<ByteBuf, RecoveryCyclePayload> RECOVERY_CYCLE_CODEC =
+            ByteBufCodecs.BOOL.map(RecoveryCyclePayload::new, RecoveryCyclePayload::next);
     public static final CustomPacketPayload.Type<MorphInputPayload> MORPH_INPUT_TYPE =
             new CustomPacketPayload.Type<>(Identifier.fromNamespaceAndPath(
                     SlimeFormMod.MOD_ID, "slime_morph_input"));
@@ -140,6 +145,14 @@ public final class SlimeFormPayloads {
         @Override
         public Type<? extends CustomPacketPayload> type() {
             return DORMANT_DEBUG_TYPE;
+        }
+    }
+
+    /** Sent while spectating a recovery: left click = next fragment, right click = previous. */
+    public record RecoveryCyclePayload(boolean next) implements CustomPacketPayload {
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return RECOVERY_CYCLE_TYPE;
         }
     }
 
