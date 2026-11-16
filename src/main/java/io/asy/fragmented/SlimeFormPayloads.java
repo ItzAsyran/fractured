@@ -91,6 +91,23 @@ public final class SlimeFormPayloads {
                     ByteBufCodecs.BOOL, PlayerAppearanceStatePayload::slimeShell,
                     PlayerAppearanceStatePayload::new);
 
+    public static final CustomPacketPayload.Type<SlimeCoreActionPayload> CORE_ACTION_TYPE =
+            new CustomPacketPayload.Type<>(Identifier.fromNamespaceAndPath(SlimeFormMod.MOD_ID, "core_action"));
+    public static final StreamCodec<ByteBuf, SlimeCoreActionPayload> CORE_ACTION_CODEC =
+            StreamCodec.composite(
+                    ByteBufCodecs.VAR_INT, SlimeCoreActionPayload::actionId,
+                    ByteBufCodecs.VAR_INT, SlimeCoreActionPayload::intParam,
+                    ByteBufCodecs.DOUBLE, SlimeCoreActionPayload::param1,
+                    ByteBufCodecs.DOUBLE, SlimeCoreActionPayload::param2,
+                    ByteBufCodecs.DOUBLE, SlimeCoreActionPayload::param3,
+                    ByteBufCodecs.DOUBLE, SlimeCoreActionPayload::param4,
+                    SlimeCoreActionPayload::new);
+
+    public static final CustomPacketPayload.Type<OpenCoreScreenPayload> OPEN_CORE_SCREEN_TYPE =
+            new CustomPacketPayload.Type<>(Identifier.fromNamespaceAndPath(SlimeFormMod.MOD_ID, "open_core_screen"));
+    public static final StreamCodec<ByteBuf, OpenCoreScreenPayload> OPEN_CORE_SCREEN_CODEC =
+            StreamCodec.unit(new OpenCoreScreenPayload());
+
     private SlimeFormPayloads() {
     }
 
@@ -164,6 +181,33 @@ public final class SlimeFormPayloads {
         @Override
         public Type<? extends CustomPacketPayload> type() {
             return PLAYER_APPEARANCE_STATE_TYPE;
+        }
+    }
+
+    public record SlimeCoreActionPayload(
+            int actionId, int intParam, double param1, double param2, double param3, double param4)
+            implements CustomPacketPayload {
+        public static final int ACTION_TOGGLE_FORM = 0;
+        public static final int ACTION_SET_MORPH_SIZE = 1;
+        public static final int ACTION_RESET_MORPH_SIZE = 2;
+        public static final int ACTION_TRIGGER_MORPH = 3;
+        public static final int ACTION_START_CALIBRATION = 4;
+        public static final int ACTION_FINISH_CALIBRATION_CORNER = 5;
+        public static final int ACTION_CANCEL_CALIBRATION = 6;
+        public static final int ACTION_SAMPLE_CALIBRATION_BOUNDS = 7;
+        public static final int ACTION_SET_DO_PHASE = 8;
+        public static final int ACTION_SET_SLIME_CHUNKS = 9;
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return CORE_ACTION_TYPE;
+        }
+    }
+
+    public record OpenCoreScreenPayload() implements CustomPacketPayload {
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return OPEN_CORE_SCREEN_TYPE;
         }
     }
 }

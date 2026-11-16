@@ -130,5 +130,6 @@
 
   "key.slimeform.highlight_nearby": "Highlight Aura Entities",
   "key.slimeform.morph": "Toggle Slime Morph",
+  "key.slimeform.open_core": "Open Slime Core",
   "key.categories.slimeform.controls": "SlimeForm"
 }

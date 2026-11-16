@@ -48,7 +48,7 @@ spot**, and only then should the player reform.
 | Code `MOD_ID`, asset namespace, mixin config | `slimeform` (`slimeform.mixins.json`, `assets/slimeform/`) |
 | Java package | `io.asy.fragmented` (mixins in `io.asy.fragmented.mixin`) |
 | Repo name referenced in metadata | `fractured` |
-| Requires | Java >= 25, Minecraft ~26.3, Fabric Loader >= 0.20.1, Fabric API, Cloth Config >= 26.3.159 |
+| Requires | Java >= 25, Minecraft ~26.3, Fabric Loader >= 0.20.1, Fabric API |
 | Suggests | Mod Menu >= 21.0.1 |
 | Entrypoints | main `SlimeFormMod`, client `SlimeFormClient`, modmenu `SlimeFormModMenu` |
 | Mixin compat level | `JAVA_25` |
@@ -67,15 +67,16 @@ asset namespace or tags casually, because saved worlds and player data contain `
 | --- | --- | --- |
 | `SlimeFormMod` | 2470 | God class: init, all server tick systems, commands, recovery, dormant, passive spawn, calibration, item debug. Most regressions originate here. |
 | `SlimeFormVisuals` | 639 | Server-side visual slimes for sleeping/dormant players, floating item displays, ambient particles. |
-| `SlimeFormClient` | 347 | Client tick, keybinds (H morph, G highlight), HUDs, morph input sender, wake-dormant sender, highlight scan. |
+| `SlimeFormClient` | 355 | Client tick, keybinds (H morph, G highlight, K core menu), HUDs, morph input sender, wake-dormant sender, highlight scan. |
 | `SlimeMorphManager` | 299 | Server-authoritative temporary slime body ("morph") state machine. |
-| `SlimeFormConfig` | 293 | AutoConfig/Cloth config model plus `effective*()` clamped accessors. |
+| `SlimeFormConfig` | 280 | GSON-backed configuration model plus `effective*()` clamped accessors. |
 | `SlimeDefenseTargetGoal` | 232 | Target goal: bigger allied slimes defend the player. |
 | `SlimeRecoveryFleeGoal` | 221 | Goal: size-1 lineage fragments flee threats. |
 | `SlimeFormState` | 205 | Active/size/health state stored as entity tags plus transient max-health modifier. |
 | `SlimeDefenseAssignmentManager` | 181 | Static, synchronized reservations (max 3 slimes per threat) for defense targeting. |
-| `SlimeFormModMenu` | 173 | Mod Menu and Cloth Config screen. |
-| `SlimeFormPayloads` | 169 | All network payloads and codecs. |
+| `SlimeFormModMenu` | 15 | Mod Menu factory pointing to `SlimeCoreScreen`. |
+| `SlimeFormPayloads` | 190 | All network payloads and codecs (including `SlimeCoreActionPayload` and `OpenCoreScreenPayload`). |
+| `gui/*` | 650+ | Bedrock "Ore UI" design system: `SlimeCoreScreen`, `SlimeStageWidget` (3D preview), `BedrockCard`, `BedrockSwitchWidget`, `BedrockSliderWidget`, `BedrockButton`, `BedrockTabButton`, and the 3 consolidated tabs (`GameplayMechanicsTab`, `AppearanceAudioTab`, `TheLabTab`). See `docs/UI_GUIDE.md`. |
 | `SlimeFormPhaseDebug`, `SlimeFormPhaseableBlocks` | 110, 94 | Experimental block-phase diagnostics and block allow-list. |
 | `SlimeAppearanceServerState` | 100 | Server relay of each player's appearance preferences to trackers. |
 | `SlimeSwampSpawn` | 66 | Cached nearest swamp used as first-join / respawn spawn. |

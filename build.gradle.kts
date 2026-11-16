@@ -19,7 +19,6 @@ tasks.withType<org.gradle.api.tasks.bundling.AbstractArchiveTask>().configureEac
 }
 
 repositories {
-	maven("https://maven.shedaniel.me/")
 	maven("https://maven.terraformersmc.com/releases/")
 	// Add repositories to retrieve artifacts from in here.
 	// You should only use this when depending on other mods because
@@ -33,7 +32,6 @@ dependencies {
 	implementation("net.fabricmc:fabric-loader:${providers.gradleProperty("loader_version").get()}")
 
 	implementation("net.fabricmc.fabric-api:fabric-api:${providers.gradleProperty("fabric_api_version").get()}")
-	implementation("me.shedaniel.cloth:cloth-config-fabric:${providers.gradleProperty("cloth_config_version").get()}")
 	compileOnly("com.terraformersmc:modmenu:${providers.gradleProperty("modmenu_version").get()}")
 	runtimeOnly("com.terraformersmc:modmenu:${providers.gradleProperty("modmenu_version").get()}")
 }

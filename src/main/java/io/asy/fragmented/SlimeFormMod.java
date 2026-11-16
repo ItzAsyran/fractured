@@ -5,7 +5,6 @@ import com.mojang.brigadier.arguments.BoolArgumentType;
 import com.mojang.brigadier.arguments.DoubleArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
-import me.shedaniel.autoconfig.AutoConfig;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.api.ModInitializer;
@@ -106,7 +105,7 @@ public class SlimeFormMod implements ModInitializer {
                 new CalibrationBounds(-0.150D, 0.150D, -0.200D, 0.110D));
     }
 
-    private enum CalibrationOrientation {
+    public enum CalibrationOrientation {
         WEST_EAST("westeast"),
         NORTH_SOUTH("northsouth");
 
@@ -213,6 +212,12 @@ public class SlimeFormMod implements ModInitializer {
         PayloadTypeRegistry.clientboundPlay().register(
                 SlimeFormPayloads.PLAYER_APPEARANCE_STATE_TYPE,
                 SlimeFormPayloads.PLAYER_APPEARANCE_STATE_CODEC);
+        PayloadTypeRegistry.serverboundPlay().register(
+                SlimeFormPayloads.CORE_ACTION_TYPE,
+                SlimeFormPayloads.CORE_ACTION_CODEC);
+        PayloadTypeRegistry.clientboundPlay().register(
+                SlimeFormPayloads.OPEN_CORE_SCREEN_TYPE,
+                SlimeFormPayloads.OPEN_CORE_SCREEN_CODEC);
         ServerPlayNetworking.registerGlobalReceiver(
                 SlimeFormPayloads.WAKE_DORMANT_TYPE,
                 (payload, context) -> wakeDormant(context.player()));
@@ -226,6 +231,10 @@ public class SlimeFormMod implements ModInitializer {
                 SlimeFormPayloads.PLAYER_APPEARANCE_PREFERENCE_TYPE,
                 (payload, context) -> context.server().execute(
                         () -> SlimeAppearanceServerState.update(context.player(), payload)));
+        ServerPlayNetworking.registerGlobalReceiver(
+                SlimeFormPayloads.CORE_ACTION_TYPE,
+                (payload, context) -> context.server().execute(
+                        () -> handleCoreAction(context.player(), payload)));
         SlimeAppearanceServerState.registerTrackingEvents();
         LOGGER.info("Sliming.");
 
@@ -277,7 +286,13 @@ public class SlimeFormMod implements ModInitializer {
 
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) ->
                 dispatcher.register(Commands.literal("slime")
-                        .executes(context -> activateSlimeForm(context.getSource().getPlayerOrException()))
+                        .executes(context -> openSlimeCore(context.getSource().getPlayerOrException()))
+                        .then(Commands.literal("gui")
+                                .executes(context -> openSlimeCore(context.getSource().getPlayerOrException())))
+                        .then(Commands.literal("menu")
+                                .executes(context -> openSlimeCore(context.getSource().getPlayerOrException())))
+                        .then(Commands.literal("on")
+                                .executes(context -> activateSlimeForm(context.getSource().getPlayerOrException())))
                         .then(Commands.literal("status")
                                 .executes(context -> showSlimeStatus(context.getSource().getPlayerOrException())))
                         .then(Commands.literal("off")
@@ -590,7 +605,7 @@ public class SlimeFormMod implements ModInitializer {
             ITEM_OFF_HAND_OFFSET_X = value;
             config.itemOffHandOffsetX = value;
         }
-        AutoConfig.getConfigHolder(SlimeFormConfig.class).save();
+        SlimeFormConfig.save();
     }
 
     private static void setItemDebugOffsetY(String hand, double value) {
@@ -602,7 +617,7 @@ public class SlimeFormMod implements ModInitializer {
             ITEM_OFF_HAND_OFFSET_Y = value;
             config.itemOffHandOffsetY = value;
         }
-        AutoConfig.getConfigHolder(SlimeFormConfig.class).save();
+        SlimeFormConfig.save();
     }
 
     private static void setItemDebugOffsetZ(String hand, double value) {
@@ -614,13 +629,13 @@ public class SlimeFormMod implements ModInitializer {
             ITEM_OFF_HAND_OFFSET_Z = value;
             config.itemOffHandOffsetZ = value;
         }
-        AutoConfig.getConfigHolder(SlimeFormConfig.class).save();
+        SlimeFormConfig.save();
     }
 
     private static int setItemDebugScale(ServerPlayer player, double value) {
         ITEM_DEBUG_SCALE = value;
         SlimeFormConfig.get().itemDisplayScale = value;
-        AutoConfig.getConfigHolder(SlimeFormConfig.class).save();
+        SlimeFormConfig.save();
         SlimeFormVisuals.refreshItemDisplays(player);
         player.sendSystemMessage(Component.literal(String.format(
                 java.util.Locale.ROOT,
@@ -632,7 +647,7 @@ public class SlimeFormMod implements ModInitializer {
     private static int toggleItemDebugAxes(ServerPlayer player) {
         ITEM_DEBUG_SHOW_AXES = !ITEM_DEBUG_SHOW_AXES;
         SlimeFormConfig.get().itemDebugShowAxes = ITEM_DEBUG_SHOW_AXES;
-        AutoConfig.getConfigHolder(SlimeFormConfig.class).save();
+        SlimeFormConfig.save();
         player.sendSystemMessage(Component.literal(String.format(
                 java.util.Locale.ROOT,
                 "Item display local axes %s.",
@@ -643,7 +658,7 @@ public class SlimeFormMod implements ModInitializer {
     private static int setDoPhase(ServerPlayer player, boolean enabled) {
         SlimeFormConfig config = SlimeFormConfig.get();
         config.doPhaseEnabled = enabled;
-        AutoConfig.getConfigHolder(SlimeFormConfig.class).save();
+        SlimeFormConfig.save();
         SlimeFormPayloads.PhaseStatePayload payload =
                 new SlimeFormPayloads.PhaseStatePayload(enabled);
         for (ServerPlayer onlinePlayer : ((ServerLevel) player.level()).getServer().getPlayerList().getPlayers()) {
@@ -658,7 +673,7 @@ public class SlimeFormMod implements ModInitializer {
 
     private static int setPhaseDebug(ServerPlayer player, boolean enabled) {
         SlimeFormConfig.get().phaseDebugEnabled = enabled;
-        AutoConfig.getConfigHolder(SlimeFormConfig.class).save();
+        SlimeFormConfig.save();
         if (enabled) {
             SlimeFormPhaseDebug.reset();
         }
@@ -672,7 +687,7 @@ public class SlimeFormMod implements ModInitializer {
     private static int setSlimeChunks(ServerPlayer player, boolean enabled) {
         SlimeFormConfig config = SlimeFormConfig.get();
         config.slimeChunksEnabled = enabled;
-        AutoConfig.getConfigHolder(SlimeFormConfig.class).save();
+        SlimeFormConfig.save();
         SlimeFormPayloads.SlimeChunksStatePayload payload = currentSlimeChunksState(
                 ((ServerLevel) player.level()).getServer());
         lastSlimeChunksState = payload;
@@ -756,7 +771,7 @@ public class SlimeFormMod implements ModInitializer {
             }
             default -> throw new IllegalArgumentException("Unknown item debug rotation axis: " + axis);
         }
-        AutoConfig.getConfigHolder(SlimeFormConfig.class).save();
+        SlimeFormConfig.save();
         SlimeFormVisuals.refreshItemDisplays(player);
         player.sendSystemMessage(Component.literal(String.format(
                 java.util.Locale.ROOT,
@@ -764,6 +779,41 @@ public class SlimeFormMod implements ModInitializer {
                 axis,
                 value)).withStyle(ChatFormatting.AQUA));
         return Command.SINGLE_SUCCESS;
+    }
+
+    private static int openSlimeCore(ServerPlayer player) {
+        ServerPlayNetworking.send(player, new SlimeFormPayloads.OpenCoreScreenPayload());
+        return Command.SINGLE_SUCCESS;
+    }
+
+    public static void handleCoreAction(ServerPlayer player, SlimeFormPayloads.SlimeCoreActionPayload payload) {
+        switch (payload.actionId()) {
+            case SlimeFormPayloads.SlimeCoreActionPayload.ACTION_TOGGLE_FORM -> {
+                if (SlimeFormState.isActive(player)) {
+                    deactivateSlimeForm(player);
+                } else {
+                    activateSlimeForm(player);
+                }
+            }
+            case SlimeFormPayloads.SlimeCoreActionPayload.ACTION_SET_MORPH_SIZE -> setMorphSize(player, payload.intParam());
+            case SlimeFormPayloads.SlimeCoreActionPayload.ACTION_RESET_MORPH_SIZE -> resetMorphSize(player);
+            case SlimeFormPayloads.SlimeCoreActionPayload.ACTION_TRIGGER_MORPH -> SlimeMorphManager.handleToggle(player);
+            case SlimeFormPayloads.SlimeCoreActionPayload.ACTION_START_CALIBRATION -> {
+                CalibrationOrientation orientation = payload.intParam() == 1 ? CalibrationOrientation.NORTH_SOUTH : CalibrationOrientation.WEST_EAST;
+                beginCalibration(player, orientation);
+            }
+            case SlimeFormPayloads.SlimeCoreActionPayload.ACTION_FINISH_CALIBRATION_CORNER -> finishCalibrationCorner(player);
+            case SlimeFormPayloads.SlimeCoreActionPayload.ACTION_CANCEL_CALIBRATION -> cancelCalibration(player);
+            case SlimeFormPayloads.SlimeCoreActionPayload.ACTION_SAMPLE_CALIBRATION_BOUNDS -> {
+                CalibrationOrientation orientation = payload.intParam() == 1 ? CalibrationOrientation.NORTH_SOUTH : CalibrationOrientation.WEST_EAST;
+                CalibrationBounds bounds = new CalibrationBounds(payload.param1(), payload.param2(), payload.param3(), payload.param4());
+                CALIBRATED_ZONES.put(orientation, bounds);
+                player.sendSystemMessage(Component.literal(formatCalibrationBounds(orientation, bounds)).withStyle(ChatFormatting.GREEN));
+            }
+            case SlimeFormPayloads.SlimeCoreActionPayload.ACTION_SET_DO_PHASE -> setDoPhase(player, payload.intParam() != 0);
+            case SlimeFormPayloads.SlimeCoreActionPayload.ACTION_SET_SLIME_CHUNKS -> setSlimeChunks(player, payload.intParam() != 0);
+            default -> LOGGER.warn("[slimeform] Unknown core action id: {}", payload.actionId());
+        }
     }
 
     private static int activateSlimeForm(ServerPlayer player) {

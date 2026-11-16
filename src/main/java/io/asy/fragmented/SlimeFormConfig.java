@@ -1,12 +1,16 @@
 package io.asy.fragmented;
 
-import me.shedaniel.autoconfig.AutoConfig;
-import me.shedaniel.autoconfig.annotation.Config;
-import me.shedaniel.autoconfig.annotation.ConfigEntry;
-import me.shedaniel.autoconfig.serializer.GsonConfigSerializer;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import net.fabricmc.loader.api.FabricLoader;
 
-@Config(name = SlimeFormMod.MOD_ID)
-public class SlimeFormConfig implements me.shedaniel.autoconfig.ConfigData {
+import java.io.Reader;
+import java.io.Writer;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+
+public class SlimeFormConfig {
     public static final int MIN_MAX_SLIME_SIZE = 1;
     public static final int MAX_MAX_SLIME_SIZE = 10;
     public static final int MIN_SPLIT_DURATION_SECONDS = 1;
@@ -32,36 +36,22 @@ public class SlimeFormConfig implements me.shedaniel.autoconfig.ConfigData {
     public static final int MIN_PLAYER_TRANSPARENCY = 0;
     public static final int MAX_PLAYER_TRANSPARENCY = 100;
 
-    @ConfigEntry.Gui.Tooltip
     public int maxSlimeSize = 5;
 
-    @ConfigEntry.Gui.Tooltip
     public boolean autoActivateSlimeForm = false;
 
-    @ConfigEntry.Gui.Tooltip
-    @ConfigEntry.BoundedDiscrete(min = MIN_SPLIT_DURATION_SECONDS, max = MAX_SPLIT_DURATION_SECONDS)
     public int splitDurationSeconds = 30;
 
-    @ConfigEntry.Gui.Tooltip
     public boolean recoveryFleePathDebug = false;
 
-    @ConfigEntry.Gui.Tooltip
     public boolean recoveryFleeDangerDebug = false;
 
-    @ConfigEntry.Gui.Tooltip
     public boolean recoveryLineageDebug = false;
 
-    @ConfigEntry.Gui.Tooltip
-    @ConfigEntry.BoundedDiscrete(
-            min = MIN_RECOVERY_REFORM_SAFETY_RADIUS,
-            max = MAX_RECOVERY_REFORM_SAFETY_RADIUS)
     public int recoveryReformSafetyRadius = 12;
 
-    @ConfigEntry.Gui.Tooltip
     public boolean recoveryHostileReformBlock = true;
 
-    @ConfigEntry.Gui.Tooltip
-    @ConfigEntry.BoundedDiscrete(min = MIN_SLIME_BALLS_REQUIRED, max = MAX_SLIME_BALLS_REQUIRED)
     public int slimeBallsRequired = 1;
 
     public double riderOffsetX = 0.0D;
@@ -76,7 +66,6 @@ public class SlimeFormConfig implements me.shedaniel.autoconfig.ConfigData {
 
     public boolean afkDormantDebug = false;
 
-    @ConfigEntry.Gui.Tooltip
     public boolean afkDormantHudDebug = false;
 
     public boolean floatingItemDisplays = true;
@@ -112,52 +101,60 @@ public class SlimeFormConfig implements me.shedaniel.autoconfig.ConfigData {
     /** Temporary bounded diagnostics for morph phase collision/suffocation. */
     public boolean phaseDebugEnabled = false;
 
-    @ConfigEntry.Gui.Tooltip
     public boolean slimeChunksEnabled = false;
 
-    @ConfigEntry.Gui.Tooltip
-    @ConfigEntry.BoundedDiscrete(min = MIN_SLIME_CHUNK_CHANCE, max = MAX_SLIME_CHUNK_CHANCE)
     public int slimeChunkChance = 50;
 
-    @ConfigEntry.Gui.Tooltip
     public boolean slimeMorphEnabled = false;
 
-    @ConfigEntry.Gui.Tooltip
     public boolean swampSpawnEnabled = false;
 
-    @ConfigEntry.Gui.Tooltip
-    @ConfigEntry.BoundedDiscrete(min = MIN_PLAYER_TRANSPARENCY, max = MAX_PLAYER_TRANSPARENCY)
     public int playerTransparencyPercent = 0;
 
-    @ConfigEntry.Gui.Tooltip
     public boolean playerTransparencySlimeTint = false;
 
-    @ConfigEntry.Gui.Tooltip
     public boolean playerTransparencySlimeShell = false;
 
-    @ConfigEntry.Gui.Tooltip
-    @ConfigEntry.BoundedDiscrete(min = 1, max = 10)
     public int slimeMorphTransformSeconds = 2;
 
-    @ConfigEntry.Gui.Tooltip
-    @ConfigEntry.BoundedDiscrete(min = 1, max = 15)
     public int slimeMorphExitSeconds = 5;
 
-    @ConfigEntry.BoundedDiscrete(
-            min = MIN_AFK_INACTIVITY_SECONDS,
-            max = MAX_AFK_INACTIVITY_SECONDS)
     public int afkInactivitySeconds = 300;
 
+    public boolean developerMode = false;
+
+    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
+    private static final Path CONFIG_PATH = FabricLoader.getInstance().getConfigDir().resolve(SlimeFormMod.MOD_ID + ".json");
+    private static SlimeFormConfig INSTANCE = new SlimeFormConfig();
+
     public static void initialize() {
-        AutoConfig.register(SlimeFormConfig.class, GsonConfigSerializer::new);
+        if (Files.exists(CONFIG_PATH)) {
+            try (Reader reader = Files.newBufferedReader(CONFIG_PATH, StandardCharsets.UTF_8)) {
+                SlimeFormConfig loaded = GSON.fromJson(reader, SlimeFormConfig.class);
+                if (loaded != null) {
+                    INSTANCE = loaded;
+                    return;
+                }
+            } catch (Exception e) {
+                SlimeFormMod.LOGGER.error("[slimeform] Failed to load config from {}, using defaults", CONFIG_PATH, e);
+            }
+        }
+        save();
     }
 
     public static SlimeFormConfig get() {
-        return AutoConfig.getConfigHolder(SlimeFormConfig.class).getConfig();
+        return INSTANCE;
     }
 
     public static void save() {
-        AutoConfig.getConfigHolder(SlimeFormConfig.class).save();
+        try {
+            Files.createDirectories(CONFIG_PATH.getParent());
+            try (Writer writer = Files.newBufferedWriter(CONFIG_PATH, StandardCharsets.UTF_8)) {
+                GSON.toJson(INSTANCE, writer);
+            }
+        } catch (Exception e) {
+            SlimeFormMod.LOGGER.error("[slimeform] Failed to save config to {}", CONFIG_PATH, e);
+        }
     }
 
     public int effectiveMaxSlimeSize() {

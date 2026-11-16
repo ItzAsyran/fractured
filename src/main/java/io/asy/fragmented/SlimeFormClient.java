@@ -10,6 +10,7 @@ import net.fabricmc.fabric.api.client.rendering.v1.hud.VanillaHudElements;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+import io.asy.fragmented.gui.SlimeCoreScreen;
 import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
@@ -45,6 +46,12 @@ public final class SlimeFormClient implements ClientModInitializer {
                     InputConstants.Type.KEYBOARD,
                     InputConstants.KEY_H,
                     CONTROLS_CATEGORY));
+    public static final KeyMapping OPEN_CORE_KEY = KeyMappingHelper.registerKeyMapping(
+            new KeyMapping(
+                    "key.slimeform.open_core",
+                    InputConstants.Type.KEYBOARD,
+                    InputConstants.KEY_K,
+                    CONTROLS_CATEGORY));
     private static SlimeFormClient instance;
     private static volatile boolean slimeChunksEnabled;
     private static volatile List<SlimeFormPayloads.AuraSource> slimeChunkSources = List.of();
@@ -73,6 +80,10 @@ public final class SlimeFormClient implements ClientModInitializer {
                     slimeChunksEnabled = payload.enabled();
                     slimeChunkSources = List.copyOf(payload.sources());
                 }));
+        ClientPlayNetworking.registerGlobalReceiver(
+                SlimeFormPayloads.OPEN_CORE_SCREEN_TYPE,
+                (payload, context) -> context.client().execute(
+                        () -> context.client().setScreenAndShow(new SlimeCoreScreen(null))));
         ClientPlayNetworking.registerGlobalReceiver(
                 SlimeFormPayloads.DORMANT_DEBUG_TYPE,
                 (payload, context) -> context.client().execute(() -> {
@@ -134,6 +145,10 @@ public final class SlimeFormClient implements ClientModInitializer {
         }
 
         updateHighlightedEntities(client);
+
+        while (OPEN_CORE_KEY.consumeClick()) {
+            client.setScreenAndShow(new SlimeCoreScreen(null));
+        }
 
         SlimeFormConfig config = SlimeFormConfig.get();
         boolean active = SlimeFormState.isClientVisualSlimeForm(client.player);
