@@ -131,7 +131,10 @@ cards.add(newCard);
 2. In `SlimeStageWidget#extractWidgetRenderState`, add the case:
    ```java
    case MY_NEW_MODE -> {
-       // Render your custom living entity or rig using InventoryScreen.extractEntityInInventoryFollowsMouse
+       // Render your custom living entity or rig using renderStateOnStage:
+       EntityRenderState state = getOrCreateSlimeRenderState(client, size, 180.0F);
+       renderStateOnStage(graphics, x1, y1, x2, y2, scale, xOffset, yOffset, zOffset, state);
    }
    ```
+   *Note: Both in-world and Main Menu preview are fully supported by creating decoupled render states.*
 3. Set the mode from any UI callback: `stage.setPreviewMode(SlimeStageWidget.PreviewMode.MY_NEW_MODE);`.
