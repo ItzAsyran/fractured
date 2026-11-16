@@ -21,7 +21,7 @@ public abstract class SlimeFormPlayerStepSoundMixin {
     private void slimeform$playSlimeStepSound(
             BlockPos pos, BlockState state, CallbackInfo ci) {
         Player player = (Player) (Object) this;
-        if (SlimeFormSounds.isSlime(player)) {
+        if (SlimeFormSounds.isSlime(player, SlimeFormSounds.Kind.FOOTSTEPS)) {
             player.playSound(SlimeFormSounds.squish(player), 0.35F, 1.15F);
             ci.cancel();
         }

@@ -1,6 +1,7 @@
 package io.asy.fragmented.mixin;
 
 import io.asy.fragmented.SlimeFormConfig;
+import io.asy.fragmented.SlimeFormSounds;
 import io.asy.fragmented.SlimeFormState;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
@@ -74,15 +75,17 @@ public abstract class SlimeBallConsumptionMixin {
             SlimeFormState.setSize(player, SlimeFormState.getSize(player) + 1);
             SlimeFormState.applyHealth(player, true);
             stack.consume(SlimeFormConfig.get().effectiveSlimeBallsRequired(), player);
-            level.playSound(
-                    null,
-                    player.getX(),
-                    player.getY(),
-                    player.getZ(),
-                    SoundEvents.SLIME_SQUISH,
-                    SoundSource.PLAYERS,
-                    1.0F,
-                    1.0F);
+            if (SlimeFormSounds.isEnabled(SlimeFormSounds.Kind.GROWTH)) {
+                level.playSound(
+                        null,
+                        player.getX(),
+                        player.getY(),
+                        player.getZ(),
+                        SoundEvents.SLIME_SQUISH,
+                        SoundSource.PLAYERS,
+                        1.0F,
+                        1.0F);
+            }
         }
         cir.setReturnValue(stack);
     }

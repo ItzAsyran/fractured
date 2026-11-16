@@ -14,8 +14,35 @@ public final class SlimeFormSounds {
     private SlimeFormSounds() {
     }
 
+    /** Individually switchable slime sounds (see the Sounds tab in the config screen). */
+    public enum Kind {
+        FOOTSTEPS, JUMP, LANDING, FALL, HURT, DEATH, ATTACK, GROWTH
+    }
+
+    public static boolean isEnabled(Kind kind) {
+        SlimeFormConfig config = SlimeFormConfig.get();
+        if (!config.slimeSoundsEnabled) {
+            return false;
+        }
+        return switch (kind) {
+            case FOOTSTEPS -> config.slimeSoundFootsteps;
+            case JUMP -> config.slimeSoundJump;
+            case LANDING -> config.slimeSoundLanding;
+            case FALL -> config.slimeSoundFall;
+            case HURT -> config.slimeSoundHurt;
+            case DEATH -> config.slimeSoundDeath;
+            case ATTACK -> config.slimeSoundAttack;
+            case GROWTH -> config.slimeSoundGrowth;
+        };
+    }
+
     public static boolean isSlime(Player player) {
         return SlimeFormState.isClientVisualSlimeForm(player);
+    }
+
+    /** True when this player should use the slime version of the given sound. */
+    public static boolean isSlime(Player player, Kind kind) {
+        return isEnabled(kind) && isSlime(player);
     }
 
     private static boolean isTiny(Player player) {

@@ -21,7 +21,7 @@ public abstract class SlimeFormWaterMixin {
             Vec3 movement,
             CallbackInfoReturnable<Vec3> cir) {
         if (!((Object) this instanceof Player player)
-                || !SlimeFormState.isActive(player)
+                || !SlimeFormState.isClientVisualSlimeForm(player)
                 || !SlimeFormConfig.get().slimeWaterBehavior
                 || !player.isInWater()) {
             return;

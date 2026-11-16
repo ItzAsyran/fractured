@@ -118,7 +118,9 @@ public abstract class SlimeFormPlayerMixin {
         }
         // Player#playSound excludes the player on the server, so the jumping
         // client plays its own copy and the server broadcasts to everyone else.
-        player.playSound(SlimeFormSounds.jump(player), 1.0F, 1.0F);
+        if (SlimeFormSounds.isEnabled(SlimeFormSounds.Kind.JUMP)) {
+            player.playSound(SlimeFormSounds.jump(player), 1.0F, 1.0F);
+        }
         if (!player.level().isClientSide()) {
             ((ServerLevel) player.level()).sendParticles(
                     ParticleTypes.ITEM_SLIME,
@@ -136,7 +138,9 @@ public abstract class SlimeFormPlayerMixin {
                 || player.fallDistance <= 0.0D) {
             return;
         }
-        player.playSound(SlimeFormSounds.squish(player), 1.0F, 1.0F);
+        if (SlimeFormSounds.isEnabled(SlimeFormSounds.Kind.LANDING)) {
+            player.playSound(SlimeFormSounds.squish(player), 1.0F, 1.0F);
+        }
         if (!player.level().isClientSide()) {
             ((ServerLevel) player.level()).sendParticles(
                     ParticleTypes.ITEM_SLIME,

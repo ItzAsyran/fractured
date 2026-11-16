@@ -22,6 +22,9 @@
 		"SlimeFormPlayerSoundMixin",
 		"SlimeFormPlayerStepSoundMixin",
 		"SlimeFormWaterMixin",
+		"SlimeMorphPeacefulMixin",
+		"SlimeMorphDebugRemoveMixin",
+		"SlimeMorphPeacefulGuardMixin",
 		"SlimeBallConsumptionMixin",
 		"SlimePetAttackMixin",
 		"SlimePlayerLifecycleMixin",
@@ -54,6 +57,8 @@
 		"SlimeAppearanceRendererMixin",
 		"SlimeAppearanceAvatarRendererMixin",
 		"SlimeAppearanceArmorRendererMixin",
+		"SlimeCosmeticaAccessoryLayerMixin",
+		"SlimeCosmeticaModelMixin",
 		"SlimeMorphRendererMixin"
 	],
 	"injectors": {

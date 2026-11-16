@@ -65,17 +65,6 @@ public class SlimeFormModMenu implements ModMenuApi {
 
         ConfigCategory activity = builder.getOrCreateCategory(
                 Component.translatable("config.slimeform.category.activity"));
-        addToggle(activity, entries, "passive_spawning", config.passiveSlimeSpawning,
-                value -> config.passiveSlimeSpawning = value);
-        addIntSlider(activity, entries, "spawn_chance", config.passiveSlimeSpawnChance,
-                SlimeFormConfig.MIN_PASSIVE_SPAWN_CHANCE, SlimeFormConfig.MAX_PASSIVE_SPAWN_CHANCE,
-                value -> config.passiveSlimeSpawnChance = value, 2);
-        addIntSlider(activity, entries, "spawn_cooldown", config.passiveSlimeSpawnCooldownSeconds,
-                SlimeFormConfig.MIN_PASSIVE_SPAWN_COOLDOWN_SECONDS, SlimeFormConfig.MAX_PASSIVE_SPAWN_COOLDOWN_SECONDS,
-                value -> config.passiveSlimeSpawnCooldownSeconds = value, 30);
-        addIntSlider(activity, entries, "max_nearby_slimes", config.maxNearbySpawnedSlimes,
-                SlimeFormConfig.MIN_MAX_NEARBY_SPAWNED_SLIMES, SlimeFormConfig.MAX_MAX_NEARBY_SPAWNED_SLIMES,
-                value -> config.maxNearbySpawnedSlimes = value, 4);
         addToggle(activity, entries, "afk_enabled", config.afkDormantEnabled,
                 value -> config.afkDormantEnabled = value);
         addIntSlider(activity, entries, "afk_duration", config.afkInactivitySeconds,
@@ -90,6 +79,31 @@ public class SlimeFormModMenu implements ModMenuApi {
                 value -> config.slimeFootstepParticles = value);
         addToggle(visuals, entries, "floating_item_displays", config.floatingItemDisplays,
                 value -> config.floatingItemDisplays = value);
+
+        ConfigCategory sounds = builder.getOrCreateCategory(
+                Component.translatable("config.slimeform.category.sounds"));
+        addToggle(sounds, entries, "slime_sounds_enabled", config.slimeSoundsEnabled,
+                value -> config.slimeSoundsEnabled = value);
+        var individualSounds = entries.startSubCategory(
+                Component.translatable("config.slimeform.slime_sounds_individual"));
+        individualSounds.add(soundToggle(entries, "slime_sound_footsteps",
+                config.slimeSoundFootsteps, value -> config.slimeSoundFootsteps = value));
+        individualSounds.add(soundToggle(entries, "slime_sound_jump",
+                config.slimeSoundJump, value -> config.slimeSoundJump = value));
+        individualSounds.add(soundToggle(entries, "slime_sound_landing",
+                config.slimeSoundLanding, value -> config.slimeSoundLanding = value));
+        individualSounds.add(soundToggle(entries, "slime_sound_fall",
+                config.slimeSoundFall, value -> config.slimeSoundFall = value));
+        individualSounds.add(soundToggle(entries, "slime_sound_hurt",
+                config.slimeSoundHurt, value -> config.slimeSoundHurt = value));
+        individualSounds.add(soundToggle(entries, "slime_sound_death",
+                config.slimeSoundDeath, value -> config.slimeSoundDeath = value));
+        individualSounds.add(soundToggle(entries, "slime_sound_attack",
+                config.slimeSoundAttack, value -> config.slimeSoundAttack = value));
+        individualSounds.add(soundToggle(entries, "slime_sound_growth",
+                config.slimeSoundGrowth, value -> config.slimeSoundGrowth = value));
+        individualSounds.setExpanded(true);
+        sounds.addEntry(individualSounds.build());
 
         ConfigCategory experimental = builder.getOrCreateCategory(
                 Component.translatable("config.slimeform.category.experimental"));
@@ -145,6 +159,14 @@ public class SlimeFormModMenu implements ModMenuApi {
         category.addEntry(entries.startBooleanToggle(Component.translatable("config.slimeform." + key), current)
                 .setDefaultValue(current).setSaveConsumer(save)
                 .setTooltip(Component.translatable("config.slimeform." + key + ".tooltip")).build());
+    }
+
+    private static me.shedaniel.clothconfig2.api.AbstractConfigListEntry soundToggle(
+            ConfigEntryBuilder entries, String key, boolean current,
+            java.util.function.Consumer<Boolean> save) {
+        return entries.startBooleanToggle(Component.translatable("config.slimeform." + key), current)
+                .setDefaultValue(true).setSaveConsumer(save)
+                .setTooltip(Component.translatable("config.slimeform." + key + ".tooltip")).build();
     }
 
     private static void addIntSlider(ConfigCategory category, ConfigEntryBuilder entries, String key, int current,

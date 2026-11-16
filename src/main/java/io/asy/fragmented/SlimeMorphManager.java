@@ -9,6 +9,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
+import net.minecraft.world.Difficulty;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.EntityTypes;
@@ -16,15 +17,24 @@ import net.minecraft.world.entity.monster.cubemob.Slime;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /** Server-authoritative state and physical body for the temporary slime morph. */
 public final class SlimeMorphManager {
     public static final String BODY_TAG = "slimeform.morph_body";
     private static final Map<UUID, State> STATES = new HashMap<>();
+    /** Bodies this class is removing on purpose, so the peaceful guard lets that removal through. */
+    private static final Set<UUID> REMOVING_BODIES = new HashSet<>();
 
     private SlimeMorphManager() {
+    }
+
+    // TEMP-DEBUG: remove together with every "debug(" call once peaceful morphing is verified.
+    private static void debug(String message, Object... args) {
+        SlimeFormMod.LOGGER.info("[slimeform-debug] " + message, args);
     }
 
     public static boolean isMorphBody(Entity entity) {
@@ -40,6 +50,24 @@ public final class SlimeMorphManager {
             }
         }
         return null;
+    }
+
+    /** True for a live morph body, which vanilla peaceful cleanup must not discard. */
+    public static boolean isProtectedFromPeacefulDespawn(Slime body) {
+        return isMorphBody(body) && !body.level().isClientSide() && ownerOf(body) != null;
+    }
+
+    /**
+     * True when a discard of this body must be refused: peaceful difficulty makes vanilla discard
+     * hostile mobs, which would end the morph. Orphaned bodies (no active morph) and removals made
+     * by this class are not blocked, so cleanup still works.
+     */
+    public static boolean shouldBlockPeacefulRemoval(Slime body) {
+        return isMorphBody(body)
+                && !body.level().isClientSide()
+                && body.level().getDifficulty() == Difficulty.PEACEFUL
+                && !REMOVING_BODIES.contains(body.getUUID())
+                && ownerOf(body) != null;
     }
 
     public static boolean isMorphed(ServerPlayer player) {
@@ -72,7 +100,14 @@ public final class SlimeMorphManager {
     }
 
     public static void handleToggle(ServerPlayer player) {
+        State debugState = STATES.get(player.getUUID());
+        debug("toggle received: morphEnabled={} active={} dormant={} spectator={} sleeping={} passenger={} alive={} difficulty={} phase={}",
+                SlimeFormConfig.get().slimeMorphEnabled, SlimeFormState.isActive(player),
+                SlimeFormMod.isDormant(player), player.isSpectator(), player.isSleeping(),
+                player.isPassenger(), player.isAlive(), player.level().getDifficulty(),
+                debugState == null ? "none" : debugState.phase);
         if (!SlimeFormConfig.get().slimeMorphEnabled || !eligible(player)) {
+            debug("toggle ignored (morph disabled in config or player not eligible)");
             return;
         }
         State state = STATES.computeIfAbsent(player.getUUID(), ignored -> new State());
@@ -109,6 +144,7 @@ public final class SlimeMorphManager {
                 continue;
             }
             if (!config.slimeMorphEnabled || !eligible(player)) {
+                debug("tick: ending morph, configEnabled={} eligible={}", config.slimeMorphEnabled, eligible(player));
                 finish(player, state, false);
                 continue;
             }
@@ -119,6 +155,11 @@ public final class SlimeMorphManager {
             if (state.phase == Phase.MORPHED || state.phase == Phase.RETURNING) {
                 Slime body = body(player, state);
                 if (body == null || !body.isAlive()) {
+                    debug("tick: body lost in phase {}: bodyId={} lookup={} bodyNull={} alive={} removed={} difficulty={}",
+                            state.phase, state.bodyId,
+                            state.bodyId == null ? null : player.level().getEntity(state.bodyId),
+                            body == null, body != null && body.isAlive(), body != null && body.isRemoved(),
+                            player.level().getDifficulty());
                     finish(player, state, false);
                     continue;
                 }
@@ -164,10 +205,13 @@ public final class SlimeMorphManager {
         ServerLevel level = (ServerLevel) player.level();
         state.wasInvisible = player.isInvisible();
         state.wasNoPhysics = player.noPhysics;
+        debug("begin: creating body, difficulty={}", level.getDifficulty());
         Slime body = EntityTypes.SLIME.create(level, EntitySpawnReason.TRIGGERED);
         if (body == null) {
-            finish(player, state, false);
-            return;
+            // Vanilla refuses to create hostile mobs in peaceful difficulty, so build the body
+            // directly. SlimeMorphPeacefulGuardMixin then keeps it from being discarded.
+            debug("begin: EntityTypes.SLIME.create returned null, constructing the body directly");
+            body = new Slime(EntityTypes.SLIME, level);
         }
         state.morphSize = SlimeFormState.getMorphSize(player);
         body.setSize(state.morphSize, true);
@@ -181,7 +225,10 @@ public final class SlimeMorphManager {
         body.setPos(player.position());
         body.setYRot(player.getYRot());
         body.setYHeadRot(player.getYRot());
-        level.addFreshEntity(body);
+        boolean debugAdded = level.addFreshEntity(body);
+        debug("begin: addFreshEntity returned {}, removed={}, alive={}, inWorld={}, size={}",
+                debugAdded, body.isRemoved(), body.isAlive(),
+                level.getEntity(body.getUUID()) != null, state.morphSize);
 
         state.bodyId = body.getUUID();
         state.phase = Phase.MORPHED;
@@ -240,8 +287,15 @@ public final class SlimeMorphManager {
 
     private static void finish(ServerPlayer player, State state, boolean successfulExit) {
         Slime body = body(player, state);
+        debug("finish: successfulExit={} hadBody={} phase={}", successfulExit, body != null, state.phase,
+                new Throwable("finish() called from"));
         if (body != null) {
-            body.remove(Entity.RemovalReason.DISCARDED);
+            REMOVING_BODIES.add(body.getUUID());
+            try {
+                body.remove(Entity.RemovalReason.DISCARDED);
+            } finally {
+                REMOVING_BODIES.remove(body.getUUID());
+            }
         }
         player.removeTag(SlimeFormMod.MORPH_TAG);
         player.setInvisible(state.wasInvisible);
@@ -265,7 +319,9 @@ public final class SlimeMorphManager {
                 ParticleTypes.ITEM_SLIME,
                 player.getX(), player.getY() + player.getBbHeight() * 0.5D, player.getZ(),
                 8, 0.25D, 0.35D, 0.25D, 0.03D);
-        player.playSound(SoundEvents.SLIME_SQUISH, 0.7F, 1.1F);
+        if (SlimeFormConfig.get().slimeSoundsEnabled) {
+            player.playSound(SoundEvents.SLIME_SQUISH, 0.7F, 1.1F);
+        }
     }
 
     private static Slime body(ServerPlayer player, State state) {

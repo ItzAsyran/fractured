@@ -18,7 +18,7 @@ public abstract class SlimeFormPlayerSoundMixin {
     private void slimeform$useSlimeHurtSound(
             DamageSource source, CallbackInfoReturnable<SoundEvent> cir) {
         Player player = (Player) (Object) this;
-        if (SlimeFormSounds.isSlime(player)) {
+        if (SlimeFormSounds.isSlime(player, SlimeFormSounds.Kind.HURT)) {
             cir.setReturnValue(SlimeFormSounds.hurt(player));
         }
     }
@@ -26,7 +26,7 @@ public abstract class SlimeFormPlayerSoundMixin {
     @Inject(method = "getDeathSound", at = @At("HEAD"), cancellable = true)
     private void slimeform$useSlimeDeathSound(CallbackInfoReturnable<SoundEvent> cir) {
         Player player = (Player) (Object) this;
-        if (SlimeFormSounds.isSlime(player)) {
+        if (SlimeFormSounds.isSlime(player, SlimeFormSounds.Kind.DEATH)) {
             cir.setReturnValue(SlimeFormSounds.death(player));
         }
     }
@@ -35,7 +35,7 @@ public abstract class SlimeFormPlayerSoundMixin {
     private void slimeform$useSlimeFallSounds(
             CallbackInfoReturnable<LivingEntity.Fallsounds> cir) {
         Player player = (Player) (Object) this;
-        if (SlimeFormSounds.isSlime(player)) {
+        if (SlimeFormSounds.isSlime(player, SlimeFormSounds.Kind.FALL)) {
             cir.setReturnValue(new LivingEntity.Fallsounds(
                     SlimeFormSounds.squish(player),
                     SlimeFormSounds.squish(player)));
@@ -46,7 +46,7 @@ public abstract class SlimeFormPlayerSoundMixin {
     @ModifyVariable(method = "playServerSideSound", at = @At("HEAD"), argsOnly = true)
     private SoundEvent slimeform$useSlimeAttackSound(SoundEvent sound) {
         Player player = (Player) (Object) this;
-        return SlimeFormSounds.isSlime(player) ? SlimeFormSounds.attack(sound) : sound;
+        return SlimeFormSounds.isSlime(player, SlimeFormSounds.Kind.ATTACK) ? SlimeFormSounds.attack(sound) : sound;
     }
 
     @ModifyArg(
@@ -60,6 +60,6 @@ public abstract class SlimeFormPlayerSoundMixin {
             index = 4)
     private SoundEvent slimeform$useSlimeDeflectSound(SoundEvent sound) {
         Player player = (Player) (Object) this;
-        return SlimeFormSounds.isSlime(player) ? SlimeFormSounds.attack(sound) : sound;
+        return SlimeFormSounds.isSlime(player, SlimeFormSounds.Kind.ATTACK) ? SlimeFormSounds.attack(sound) : sound;
     }
 }

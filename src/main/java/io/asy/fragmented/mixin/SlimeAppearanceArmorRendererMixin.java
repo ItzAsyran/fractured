@@ -16,8 +16,9 @@ import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.ModifyArg;
-import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.mojang.blaze3d.vertex.PoseStack;
 
 @Mixin(targets = "net.minecraft.client.renderer.entity.layers.EquipmentLayerRenderer")
@@ -77,16 +78,22 @@ public abstract class SlimeAppearanceArmorRendererMixin {
         slimeform$appearance.remove();
     }
 
-    @Redirect(
+    // WrapOperation instead of Redirect: a Redirect claims the call exclusively, so any other mod
+    // that redirects the same armor render-type call (Cosmetica does) is skipped with an
+    // "@Redirect conflict". WrapOperation lets both mods coexist. require = 0 so a different
+    // mod changing this call can never crash the game at load; we just lose armor transparency.
+    @WrapOperation(
             method = RENDER_LAYERS_METHOD,
             at = @At(
                     value = "INVOKE",
                     target = "Lnet/minecraft/client/renderer/rendertype/RenderTypes;"
                             + "armorCutoutNoCull(Lnet/minecraft/resources/Identifier;)"
-                            + "Lnet/minecraft/client/renderer/rendertype/RenderType;"))
-    private RenderType slimeform$makeArmorTranslucent(Identifier texture) {
+                            + "Lnet/minecraft/client/renderer/rendertype/RenderType;"),
+            require = 0)
+    private RenderType slimeform$makeArmorTranslucent(
+            Identifier texture, Operation<RenderType> original) {
         return slimeform$appearance.get() == null
-                ? RenderTypes.armorCutoutNoCull(texture)
+                ? original.call(texture)
                 : RenderTypes.entityTranslucent(texture);
     }
 

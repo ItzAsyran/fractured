@@ -28,12 +28,9 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
-import net.minecraft.world.entity.EntitySpawnReason;
-import net.minecraft.world.entity.MobCategory;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.monster.cubemob.Slime;
 import net.minecraft.world.entity.monster.cubemob.MagmaCube;
@@ -47,8 +44,6 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LevelAccessor;
 import net.minecraft.world.level.pathfinder.Path;
 import net.minecraft.world.level.GameType;
-import net.minecraft.world.level.NaturalSpawner;
-import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.resources.ResourceKey;
 import io.asy.fragmented.mixin.SlimeServerConnectionAccessor;
 import org.slf4j.Logger;
@@ -100,12 +95,7 @@ public class SlimeFormMod implements ModInitializer {
     private static final double[] RECOVERY_FLEE_WAYPOINT_DISTANCES = {8.0D, 12.0D, 16.0D};
     public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
     private static final Map<UUID, Recovery> RECOVERIES = new HashMap<>();
-    private static final Map<UUID, Long> PASSIVE_SPAWN_NEXT_ATTEMPT = new HashMap<>();
     private static SlimeFormPayloads.SlimeChunksStatePayload lastSlimeChunksState;
-    private static final String PASSIVE_SLIME_TAG = "slimeform.passive_spawn";
-    private static final double PASSIVE_SPAWN_MIN_DISTANCE = 8.0D;
-    private static final double PASSIVE_SPAWN_MAX_DISTANCE = 24.0D;
-    private static final int PASSIVE_SPAWN_LIGHT_THRESHOLD = 7;
 
     static {
         CALIBRATED_ZONES.put(
@@ -244,7 +234,6 @@ public class SlimeFormMod implements ModInitializer {
                 SlimeRiderScale.tick(player);
             }
             tickRecoveries(server);
-            tickPassiveSlimeSpawning(server);
             tickDormantPlayers(server);
             tickSlimeChunksState(server);
             SlimeMorphManager.tick(server);
@@ -284,7 +273,6 @@ public class SlimeFormMod implements ModInitializer {
             COMBAT_TICKS.remove(player.getUUID());
             ACTIVITY_POSITIONS.remove(player.getUUID());
             DORMANT_PREVIOUS_INVISIBILITY.remove(player.getUUID());
-            PASSIVE_SPAWN_NEXT_ATTEMPT.remove(player.getUUID());
         });
 
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) ->
@@ -1255,34 +1243,6 @@ public class SlimeFormMod implements ModInitializer {
                 SlimeFormMod::isRecoveryHostile).isEmpty();
     }
 
-    private static void tickPassiveSlimeSpawning(MinecraftServer server) {
-        SlimeFormConfig config = SlimeFormConfig.get();
-        if (!config.passiveSlimeSpawning) {
-            PASSIVE_SPAWN_NEXT_ATTEMPT.clear();
-            return;
-        }
-
-        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
-            UUID playerId = player.getUUID();
-            if (!SlimeFormState.isActive(player) || player.isSpectator()) {
-                PASSIVE_SPAWN_NEXT_ATTEMPT.remove(playerId);
-                continue;
-            }
-
-            long gameTime = player.level().getGameTime();
-            long nextAttempt = PASSIVE_SPAWN_NEXT_ATTEMPT.getOrDefault(playerId, 0L);
-            if (gameTime < nextAttempt) {
-                continue;
-            }
-            PASSIVE_SPAWN_NEXT_ATTEMPT.put(
-                    playerId,
-                    gameTime + config.effectivePassiveSlimeSpawnCooldownSeconds()
-                            * RECOVERY_COUNTDOWN_INTERVAL_TICKS);
-
-            tryPassiveSlimeSpawn(player, config);
-        }
-    }
-
     private static void updateRecoveryFleeDangerBar(
             Recovery recovery,
             ServerPlayer player,
@@ -1319,76 +1279,6 @@ public class SlimeFormMod implements ModInitializer {
                 nearestDistance)));
         bar.addPlayer(player);
         bar.setVisible(true);
-    }
-
-    private static void tryPassiveSlimeSpawn(ServerPlayer player, SlimeFormConfig config) {
-        ServerLevel level = (ServerLevel) player.level();
-        AABB nearbyArea = player.getBoundingBox().inflate(PASSIVE_SPAWN_MAX_DISTANCE);
-        int passiveNearby = level.getEntitiesOfClass(
-                Slime.class,
-                nearbyArea,
-                slime -> slime.entityTags().contains(PASSIVE_SLIME_TAG)).size();
-        if (passiveNearby >= config.effectiveMaxNearbySpawnedSlimes()
-                || !hasMonsterMobCapSpace(level)) {
-            return;
-        }
-
-        double angle = level.getRandom().nextDouble() * Math.PI * 2.0D;
-        double distance = PASSIVE_SPAWN_MIN_DISTANCE
-                + level.getRandom().nextDouble()
-                * (PASSIVE_SPAWN_MAX_DISTANCE - PASSIVE_SPAWN_MIN_DISTANCE);
-        int x = (int) Math.floor(player.getX() + Math.cos(angle) * distance);
-        int z = (int) Math.floor(player.getZ() + Math.sin(angle) * distance);
-        int y = level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z);
-        BlockPos spawnPos = new BlockPos(x, y, z);
-        int light = level.getMaxLocalRawBrightness(spawnPos);
-        boolean nighttime = level.getOverworldClockTime() % 24000L >= 13000L;
-        if (!nighttime && light > PASSIVE_SPAWN_LIGHT_THRESHOLD) {
-            return;
-        }
-
-        double distanceWeight = distance / PASSIVE_SPAWN_MAX_DISTANCE;
-        double conditionWeight = nighttime ? 1.0D : 0.5D;
-        if (light <= PASSIVE_SPAWN_LIGHT_THRESHOLD) {
-            conditionWeight += 0.25D;
-        }
-        double chance = config.effectivePassiveSlimeSpawnChance()
-                / 100.0D
-                * distanceWeight
-                * conditionWeight;
-        if (level.getRandom().nextDouble() >= chance
-                || !Slime.checkSlimeSpawnRules(
-                        EntityTypes.SLIME,
-                        level,
-                        EntitySpawnReason.NATURAL,
-                        spawnPos,
-                        level.getRandom())) {
-            return;
-        }
-
-        Slime slime = EntityTypes.SLIME.create(level, EntitySpawnReason.NATURAL);
-        if (slime == null) {
-            return;
-        }
-        slime.addTag(PASSIVE_SLIME_TAG);
-        slime.finalizeSpawn(
-                level,
-                level.getCurrentDifficultyAt(spawnPos),
-                EntitySpawnReason.NATURAL,
-                null);
-        slime.setPos(spawnPos.getX() + 0.5D, spawnPos.getY(), spawnPos.getZ() + 0.5D);
-        level.addFreshEntity(slime);
-    }
-
-    private static boolean hasMonsterMobCapSpace(ServerLevel level) {
-        NaturalSpawner.SpawnState spawnState = level.getChunkSource().getLastSpawnState();
-        if (spawnState == null || spawnState.getSpawnableChunkCount() <= 0) {
-            return false;
-        }
-        int monsterCount = spawnState.getMobCategoryCounts().getInt(MobCategory.MONSTER);
-        int monsterCap = spawnState.getSpawnableChunkCount()
-                * MobCategory.MONSTER.getMaxInstancesPerChunk();
-        return monsterCount < monsterCap;
     }
 
     private static void completeFailedRecovery(
