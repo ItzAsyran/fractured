@@ -41,8 +41,6 @@ public class BedrockSwitchWidget extends AbstractWidget {
         if (this.onToggle != null) {
             this.onToggle.accept(this.value);
         }
-        Minecraft.getInstance().getSoundManager().play(
-                SimpleSoundInstance.forUI(SoundEvents.SLIME_SQUISH_SMALL, this.value ? 1.3F : 1.0F));
     }
 
     @Override

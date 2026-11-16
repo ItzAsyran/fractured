@@ -38,10 +38,10 @@ The UI uses a light, translucent floating card aesthetic matching Minecraft: Bed
 
 ### UI Component Primitives (`io.asy.fragmented.gui.components`)
 
-* **`BedrockCard`:** Grouped container with rounded borders, title bar, and auto-layout for children. Supports collapsible accordion mode (used for Developer Mode).
-* **`BedrockSwitchWidget`:** Pill-shaped toggle switch (30×16 px) with sliding white knob and squish audio feedback (`SoundEvents.SLIME_SQUISH_SMALL`).
-* **`BedrockSliderWidget`:** Sleek 4px line slider with active slime-green progress fill, formatted text readout, and sliding rounded thumb.
-* **`BedrockButton`:** Clean rounded card button with `PRIMARY` (green), `NEUTRAL` (translucent), or `DANGER` (red) styles.
+* **`BedrockCard`:** Grouped container with rounded borders, title bar, and auto-layout for children. Supports collapsible accordion mode (used for Developer Mode) and handles focused-child dispatch for dragging without audio duplicate events.
+* **`BedrockSwitchWidget`:** Pill-shaped toggle switch (30×16 px) with sliding white knob and clean single vanilla click audio feedback.
+* **`BedrockSliderWidget`:** Sleek 4px line slider with active slime-green progress fill, value snapping/locking to discrete steps (integer steps or floating increments), and reliable mouse dragging.
+* **`BedrockButton`:** Clean rounded card button with `PRIMARY` (green), `NEUTRAL` (translucent), or `DANGER` (red) styles using standard vanilla UI button click sounds.
 * **`BedrockTabButton`:** Pill tab button with active bottom emerald line.
 
 ---
@@ -69,20 +69,20 @@ The UI uses a light, translucent floating card aesthetic matching Minecraft: Bed
 
 ## 4. Contextual 3D Stage Engine (`SlimeStageWidget`)
 
-The 3D stage dynamically switches preview rigs depending on the active setting:
+The 3D stage dynamically switches preview rigs depending on the active setting using `GuiGraphicsExtractor.entity(...)`:
 
 | Mode | Trigger | What Renders in 3D |
 | :--- | :--- | :--- |
 | `AVATAR_SHADERS` | Transparency, Tint, Shell | Player avatar with live transparency & jelly shell layers |
-| `SLIME_SCALE` | Max Size, Slime Balls, Morph | Slime entity scaling dynamically (size 1 to 10) |
-| `MOUNTED_RIDER` | Rider X, Y, Z offsets | Player model offset vertically/horizontally atop slime |
+| `SLIME_SCALE` | Max Size, Slime Balls, Morph Size | Slime entity scaling dynamically to the exact selected size (max size or custom morph size) |
+| `MOUNTED_RIDER` | Rider X, Y, Z offsets | Slime entity with the player model mounted atop it, interactively responding to rider offsets |
 | `FLOATING_ITEMS` | Floating items, item scale/rot | Translucent size-2 slime showing internal item preview |
 | `RECOVERY_RING` | Split duration, safety radius | Miniature size-1 baby slime |
 
 ### Mouse Controls:
-* **Left-Click + Drag:** Rotates camera yaw and pitch.
-* **Scroll Wheel / Zoom Buttons:** Zooms camera in and out.
-* **Reset View Button:** Restores default orientation.
+* **Left-Click + Drag on Stage:** Rotates camera yaw 360° and tilts pitch up/down.
+* **Scroll Wheel / Zoom Buttons:** Zooms viewport in and out (50% to 250%).
+* **Reset View Button:** Restores default orientation and 100% zoom.
 
 ---
 

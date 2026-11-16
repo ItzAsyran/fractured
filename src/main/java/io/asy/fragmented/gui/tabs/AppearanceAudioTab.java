@@ -132,7 +132,7 @@ public class AppearanceAudioTab extends SlimeCoreTab {
 
         itemCard.addSlider(
                 Component.translatable("config.slimeform.item_display_rotation_x"),
-                config.itemDisplayRotationX, SlimeFormConfig.MIN_ITEM_DISPLAY_ROTATION, SlimeFormConfig.MAX_ITEM_DISPLAY_ROTATION, false,
+                config.itemDisplayRotationX, SlimeFormConfig.MIN_ITEM_DISPLAY_ROTATION, SlimeFormConfig.MAX_ITEM_DISPLAY_ROTATION, false, 5.0D,
                 val -> Component.literal(String.format(Locale.ROOT, "Rotation X: %.1f°", val)),
                 val -> {
                     config.itemDisplayRotationX = val;
@@ -143,7 +143,7 @@ public class AppearanceAudioTab extends SlimeCoreTab {
 
         itemCard.addSlider(
                 Component.translatable("config.slimeform.item_display_bob_amplitude"),
-                config.itemDisplayBobAmplitude, SlimeFormConfig.MIN_ITEM_DISPLAY_BOB, SlimeFormConfig.MAX_ITEM_DISPLAY_BOB, false,
+                config.itemDisplayBobAmplitude, SlimeFormConfig.MIN_ITEM_DISPLAY_BOB, SlimeFormConfig.MAX_ITEM_DISPLAY_BOB, false, 0.01D,
                 val -> Component.literal(String.format(Locale.ROOT, "Bob Amplitude: %.2f", val)),
                 val -> {
                     config.itemDisplayBobAmplitude = val;

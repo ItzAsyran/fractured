@@ -40,8 +40,6 @@ public class BedrockTabButton extends AbstractWidget {
     @Override
     public void onClick(MouseButtonEvent event, boolean doubleClick) {
         if (!selected && onSelect != null) {
-            Minecraft.getInstance().getSoundManager().play(
-                    SimpleSoundInstance.forUI(SoundEvents.SLIME_SQUISH_SMALL, 1.35F));
             onSelect.accept(tabIndex);
         }
     }

@@ -50,8 +50,16 @@ public class GameplayMechanicsTab extends SlimeCoreTab {
                 val -> {
                     config.maxSlimeSize = val.intValue();
                     SlimeFormConfig.save();
+                    if (stage != null) {
+                        stage.clearCustomSlimeSize();
+                    }
                 },
-                () -> stage.setPreviewMode(SlimeStageWidget.PreviewMode.SLIME_SCALE)
+                () -> {
+                    if (stage != null) {
+                        stage.clearCustomSlimeSize();
+                        stage.setPreviewMode(SlimeStageWidget.PreviewMode.SLIME_SCALE);
+                    }
+                }
         );
 
         coreCard.addSlider(
@@ -90,17 +98,27 @@ public class GameplayMechanicsTab extends SlimeCoreTab {
                 }
         );
 
+        int initialMorphSize = client.player != null ? SlimeFormState.getMorphSize(client.player) : config.effectiveMaxSlimeSize();
         morphCard.addSlider(
                 Component.literal("Custom Morph Size"),
-                config.maxSlimeSize, 1, config.effectiveMaxSlimeSize(), true,
+                initialMorphSize, 1, Math.max(initialMorphSize, config.effectiveMaxSlimeSize()), true,
                 val -> Component.literal("Target Morph Size: " + val.intValue()),
                 val -> {
+                    if (stage != null) {
+                        stage.setPreviewSlimeSize(val.intValue());
+                    }
                     if (ClientPlayNetworking.canSend(SlimeFormPayloads.CORE_ACTION_TYPE)) {
                         ClientPlayNetworking.send(new SlimeFormPayloads.SlimeCoreActionPayload(
                                 SlimeFormPayloads.SlimeCoreActionPayload.ACTION_SET_MORPH_SIZE, val.intValue(), 0, 0, 0, 0));
                     }
                 },
-                () -> stage.setPreviewMode(SlimeStageWidget.PreviewMode.SLIME_SCALE)
+                () -> {
+                    if (stage != null) {
+                        stage.setPreviewMode(SlimeStageWidget.PreviewMode.SLIME_SCALE);
+                        int currentMorph = client.player != null ? SlimeFormState.getMorphSize(client.player) : config.effectiveMaxSlimeSize();
+                        stage.setPreviewSlimeSize(currentMorph);
+                    }
+                }
         );
 
         morphCard.addSlider(

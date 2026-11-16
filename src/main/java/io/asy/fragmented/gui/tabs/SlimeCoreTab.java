@@ -14,6 +14,7 @@ public abstract class SlimeCoreTab {
     protected int y;
     protected int width;
     protected SlimeStageWidget stage;
+    private BedrockCard activeCard = null;
 
     public void init(int x, int y, int width, SlimeStageWidget stage) {
         this.x = x;
@@ -51,6 +52,7 @@ public abstract class SlimeCoreTab {
     public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
         for (BedrockCard card : cards) {
             if (card.mouseClicked(event, doubleClick)) {
+                this.activeCard = card;
                 return true;
             }
         }
@@ -58,19 +60,17 @@ public abstract class SlimeCoreTab {
     }
 
     public boolean mouseReleased(MouseButtonEvent event) {
-        for (BedrockCard card : cards) {
-            if (card.mouseReleased(event)) {
-                return true;
-            }
+        if (activeCard != null) {
+            boolean result = activeCard.mouseReleased(event);
+            activeCard = null;
+            return result;
         }
         return false;
     }
 
     public boolean mouseDragged(MouseButtonEvent event, double dragX, double dragY) {
-        for (BedrockCard card : cards) {
-            if (card.mouseDragged(event, dragX, dragY)) {
-                return true;
-            }
+        if (activeCard != null) {
+            return activeCard.mouseDragged(event, dragX, dragY);
         }
         return false;
     }

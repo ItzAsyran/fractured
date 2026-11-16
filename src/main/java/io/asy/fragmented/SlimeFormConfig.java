@@ -33,6 +33,8 @@ public class SlimeFormConfig {
     public static final double MAX_ITEM_DISPLAY_BOB = 1.0D;
     public static final int MIN_PLAYER_TRANSPARENCY = 0;
     public static final int MAX_PLAYER_TRANSPARENCY = 100;
+    public static final int MIN_RECOVERY_REFORM_SAFETY_RADIUS = 2;
+    public static final int MAX_RECOVERY_REFORM_SAFETY_RADIUS = 32;
 
     public int maxSlimeSize = 5;
 
@@ -94,6 +96,7 @@ public class SlimeFormConfig {
     public double itemDisplayRotationY = 0.0D;
     public double itemDisplayRotationZ = 0.0D;
     public double itemDisplayBobAmplitude = 0.01D;
+    public boolean itemDebugShowAxes = false;
 
     public boolean doPhaseEnabled = false;
 

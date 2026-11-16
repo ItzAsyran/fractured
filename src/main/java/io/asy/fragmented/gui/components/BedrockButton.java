@@ -45,8 +45,6 @@ public class BedrockButton extends AbstractWidget {
     @Override
     public void onClick(MouseButtonEvent event, boolean doubleClick) {
         if (this.onPress != null && active) {
-            Minecraft.getInstance().getSoundManager().play(
-                    SimpleSoundInstance.forUI(SoundEvents.SLIME_SQUISH_SMALL, 1.2F));
             this.onPress.run();
         }
     }

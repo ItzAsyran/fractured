@@ -93,7 +93,6 @@ public class SlimeFormMod implements ModInitializer {
         PayloadTypeRegistry.clientboundPlay().register(
                 SlimeFormPayloads.OPEN_CORE_SCREEN_TYPE,
                 SlimeFormPayloads.OPEN_CORE_SCREEN_CODEC);
-
         ServerPlayNetworking.registerGlobalReceiver(
                 SlimeFormPayloads.WAKE_DORMANT_TYPE,
                 (payload, context) -> wakeDormant(context.player()));
@@ -117,7 +116,6 @@ public class SlimeFormMod implements ModInitializer {
                 SlimeFormPayloads.CORE_ACTION_TYPE,
                 (payload, context) -> context.server().execute(
                         () -> handleCoreAction(context.player(), payload)));
-
         SlimeAppearanceServerState.registerTrackingEvents();
         LOGGER.info("Sliming.");
 
@@ -131,30 +129,36 @@ public class SlimeFormMod implements ModInitializer {
             SlimeMorphManager.tick(server);
             SlimeFormVisuals.processPendingRemovals(server);
         });
-
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
             ServerPlayer player = handler.getPlayer();
-            ACTIVITY_TICKS.put(player.getUUID(), player.level().getGameTime());
-            ACTIVITY_POSITIONS.put(player.getUUID(), player.position());
-            DORMANT_PREVIOUS_INVISIBILITY.remove(player.getUUID());
-            SlimeRecoveryManager.handlePlayerJoin(player);
             if (SlimeFormConfig.get().autoActivateSlimeForm && !SlimeFormState.isActive(player)) {
-                activateSlimeForm(player);
+                SlimeFormState.activate(player);
+                player.sendSystemMessage(Component.literal("Slime form automatically activated.")
+                        .withStyle(ChatFormatting.GREEN));
             }
-            if (SlimeFormState.isActive(player)) {
-                SlimeFormState.applyHealthModifier(player);
-            }
+            SlimeFormState.applyHealth(player, false);
+            SlimeRecoveryManager.notifyAbandonedRecovery(player);
             ServerPlayNetworking.send(player,
                     new SlimeFormPayloads.PhaseStatePayload(SlimeFormConfig.get().doPhaseEnabled));
             ServerPlayNetworking.send(player, currentSlimeChunksState(server));
-            SlimeAppearanceServerState.sendToTracker(player);
-            SlimeAppearanceServerState.sendTrackersTo(player);
+            SlimeAppearanceServerState.sendSnapshot(player);
+            ACTIVITY_TICKS.put(player.getUUID(), player.level().getGameTime());
+            ACTIVITY_POSITIONS.put(player.getUUID(), player.position());
+            LOGGER.info("[slimeform] Joined {}: active={}, size={}, maxHealth={}, health={}",
+                    player.getName().getString(),
+                    SlimeFormState.isActive(player),
+                    SlimeFormState.getSize(player),
+                    player.getMaxHealth(),
+                    player.getHealth());
         });
-
         ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> {
             ServerPlayer player = handler.getPlayer();
-            SlimeRecoveryManager.handlePlayerDisconnect(player);
+            // Must run first: ends a running recovery so the inventory is dropped, not lost.
+            SlimeRecoveryManager.handlePlayerDisconnect(server, player);
+            SlimeAppearanceServerState.remove(player);
+            SlimeRiderScale.clear(player);
             SlimeMorphManager.stop(player);
+            wakeDormant(player);
             SlimeFormVisuals.remove(player, false);
             SlimeFormVisuals.queueDormantRemoval(player);
             ACTIVITY_TICKS.remove(player.getUUID());
@@ -207,7 +211,7 @@ public class SlimeFormMod implements ModInitializer {
                                         BoolArgumentType.getBool(context, "enabled")))));
     }
 
-    private static int openSlimeCore(ServerPlayer player) {
+    public static int openSlimeCore(ServerPlayer player) {
         ServerPlayNetworking.send(player, new SlimeFormPayloads.OpenCoreScreenPayload());
         return Command.SINGLE_SUCCESS;
     }
@@ -383,6 +387,7 @@ public class SlimeFormMod implements ModInitializer {
     }
 
     private static void tickDormantPlayers(MinecraftServer server) {
+        // Config is global for the server; read it once instead of once per player.
         SlimeFormConfig config = SlimeFormConfig.get();
         for (ServerPlayer player : server.getPlayerList().getPlayers()) {
             if (!SlimeFormState.isActive(player)) {
@@ -459,39 +464,158 @@ public class SlimeFormMod implements ModInitializer {
         DORMANT_PREVIOUS_INVISIBILITY.put(player.getUUID(), player.isInvisible());
         player.setInvisible(true);
         player.addTag(SLIME_DORMANT_TAG);
-        SlimeFormVisuals.attachDormant(player);
-        player.sendOverlayMessage(Component.literal("Dormant mode active — left-click to wake.")
-                .withStyle(ChatFormatting.AQUA));
+        player.setDeltaMovement(Vec3.ZERO);
+        SlimeFormVisuals.tick(player);
+        player.sendOverlayMessage(
+                Component.literal("Dormant slime engaged. ").withStyle(ChatFormatting.GREEN)
+                        .append(Component.literal("Left-click to wake.").withStyle(ChatFormatting.GRAY)));
+        LOGGER.info("[slimeform] Player {} entered dormant mode; vehicle={}",
+                player.getName().getString(),
+                player.getVehicle() == null ? "none" : player.getVehicle().getType());
+    }
+
+    private static boolean hasMoved(ServerPlayer player) {
+        Vec3 previous = ACTIVITY_POSITIONS.get(player.getUUID());
+        return previous != null && player.position().distanceToSqr(previous) > 0.000001D;
     }
 
     private static String dormantEntryBlockReason(ServerPlayer player, long now) {
-        if (!player.onGround() || player.isSwimming() || player.isInWater() || player.isFallFlying()) {
-            return "moving or airborne";
+        long combat = COMBAT_TICKS.getOrDefault(player.getUUID(), Long.MIN_VALUE);
+        boolean combatCooldownComplete = combat == Long.MIN_VALUE || now - combat >= 200L;
+        if (player.gameMode() != GameType.SURVIVAL) {
+            return "survival mode required";
         }
-        if (player.isPassenger() || player.isVehicle()) {
-            return "riding or carrying";
+        if (player.isSleeping()) {
+            return "player is sleeping";
         }
-        Long combat = COMBAT_TICKS.get(player.getUUID());
-        if (combat != null && now - combat < 100L) {
-            return "recent combat";
+        if (player.isOnFire()) {
+            return "player is on fire";
         }
-        AABB dangerArea = player.getBoundingBox().inflate(8.0D, 4.0D, 8.0D);
-        List<Enemy> enemies = player.level().getEntitiesOfClass(
-                Enemy.class, dangerArea, entity -> entity instanceof LivingEntity living && living.isAlive());
-        for (Enemy enemy : enemies) {
-            if (enemy instanceof LivingEntity living && living.hasLineOfSight(player)) {
-                return "threat nearby";
-            }
+        if (player.isInLava()) {
+            return "player is in lava";
+        }
+        if (player.isInWater()) {
+            return "player is in water";
+        }
+        if (!player.onGround()) {
+            return "player is not on the ground";
+        }
+        if (player.getVehicle() != null) {
+            return "player already has a vehicle";
+        }
+        if (!combatCooldownComplete) {
+            return "combat cooldown active";
         }
         return null;
     }
 
-    private static boolean hasMoved(ServerPlayer player) {
-        Vec3 last = ACTIVITY_POSITIONS.get(player.getUUID());
-        if (last == null) {
-            return true;
-        }
-        return player.position().distanceToSqr(last) > 0.0004D;
+    private static double getRiderSizeMultiplier(Player player) {
+        return SlimeFormState.getRiderSize(player) * player.getScale();
+    }
+
+    public static double getRiderOffsetX(Player player) {
+        return SlimeFormConfig.get().effectiveRiderOffsetX() * getRiderSizeMultiplier(player);
+    }
+
+    public static double getRiderOffsetY(Player player) {
+        return SlimeFormConfig.get().effectiveRiderOffsetYPerSize() * getRiderSizeMultiplier(player);
+    }
+
+    public static double getRiderOffsetZ(Player player) {
+        return SlimeFormConfig.get().effectiveRiderOffsetZ() * getRiderSizeMultiplier(player);
+    }
+
+    public static int getSplitDurationTicks() {
+        return SlimeFormConfig.get().effectiveSplitDurationSeconds()
+                * RECOVERY_COUNTDOWN_INTERVAL_TICKS;
+    }
+
+    // ---- Forwarders kept so mixins/goals keep calling SlimeFormMod.* unchanged ----
+    // Recovery logic now lives in SlimeRecoveryManager.
+
+    public static String createRecoveryLineageId(ServerPlayer player) {
+        return SlimeRecoveryManager.createRecoveryLineageId(player);
+    }
+
+    public static boolean hasRecoveryLineage(Slime slime) {
+        return SlimeRecoveryManager.hasRecoveryLineage(slime);
+    }
+
+    public static String getRecoveryLineage(Slime slime) {
+        return SlimeRecoveryManager.getRecoveryLineage(slime);
+    }
+
+    public static UUID getRecoveryParent(Slime slime) {
+        return SlimeRecoveryManager.getRecoveryParent(slime);
+    }
+
+    public static int getRecoveryGeneration(Slime slime) {
+        return SlimeRecoveryManager.getRecoveryGeneration(slime);
+    }
+
+    public static String getRecoveryDebugLabel(Slime slime) {
+        return SlimeRecoveryManager.getRecoveryDebugLabel(slime);
+    }
+
+    public static void assignRecoveryLineage( Slime slime, String lineageId, UUID parentId, int generation) {
+        SlimeRecoveryManager.assignRecoveryLineage(slime, lineageId, parentId, generation);
+    }
+
+    public static boolean assignRecoveryLineage(Slime parent, Slime child) {
+        return SlimeRecoveryManager.assignRecoveryLineage(parent, child);
+    }
+
+    public static boolean isPlayerOriginSlime(Slime slime) {
+        return SlimeRecoveryManager.isPlayerOriginSlime(slime);
+    }
+
+    public static void trackRecoveryLineageEntity(Slime slime) {
+        SlimeRecoveryManager.trackRecoveryLineageEntity(slime);
+    }
+
+    public static void beginRecovery( ServerPlayer player, List<Slime> splitSlimes, GameType previousGameMode, LivingEntity originalKiller) {
+        SlimeRecoveryManager.beginRecovery(player, splitSlimes, previousGameMode, originalKiller);
+    }
+
+    public static void syncRecoveryCamera(ServerPlayer player, Entity target) {
+        SlimeRecoveryManager.syncRecoveryCamera(player, target);
+    }
+
+    static Path findRecoveryFleePath(
+            Slime slime, List<Mob> threats, Vec3 heading, List<Vec3> trail, BlockPos preferredTarget) {
+        return SlimeRecoveryManager.findRecoveryFleePath(slime, threats, heading, trail, preferredTarget);
+    }
+
+    static boolean isRecoveryFleePathSafe(Slime slime, Path path, List<Mob> threats) {
+        return SlimeRecoveryManager.isRecoveryFleePathSafe(slime, path, threats);
+    }
+
+    static List<Mob> getRecoveryFragmentThreats(Slime slime) {
+        return SlimeRecoveryManager.getRecoveryFragmentThreats(slime);
+    }
+
+    static Vec3 getRecoveryRegroupHome(Slime slime) {
+        return SlimeRecoveryManager.getRecoveryRegroupHome(slime);
+    }
+
+    static Slime getRecoveryRegroupAnchor(Slime slime) {
+        return SlimeRecoveryManager.getRecoveryRegroupAnchor(slime);
+    }
+
+    static void setRecoveryRegroupStatus(Slime slime, String status) {
+        SlimeRecoveryManager.setRecoveryRegroupStatus(slime, status);
+    }
+
+    static boolean isRecoveryRegroupPathSafe(Slime slime, Path path) {
+        return SlimeRecoveryManager.isRecoveryRegroupPathSafe(slime, path);
+    }
+
+    static void visualizeRecoveryFleePath(Slime slime, Path path, List<Mob> threats) {
+        SlimeRecoveryManager.visualizeRecoveryFleePath(slime, path, threats);
+    }
+
+    static boolean isRecoveryHostile(LivingEntity entity) {
+        return SlimeRecoveryManager.isRecoveryHostile(entity);
     }
 
     public static void playSlimePlayerEffect(ServerPlayer player, int particleCount, float pitch) {
@@ -569,6 +693,15 @@ public class SlimeFormMod implements ModInitializer {
         return Command.SINGLE_SUCCESS;
     }
 
+    private static MutableComponent labeledMessage(
+            String label,
+            String value,
+            ChatFormatting labelColor,
+            ChatFormatting valueColor) {
+        return Component.literal(label).withStyle(labelColor)
+                .append(Component.literal(value).withStyle(valueColor));
+    }
+
     public static int commandNearbySlimesToAttack(Player player, LivingEntity target) {
         if (player.level().isClientSide()
                 || !SlimeFormState.isActive(player)
@@ -588,4 +721,5 @@ public class SlimeFormMod implements ModInitializer {
         }
         return commanded;
     }
+
 }

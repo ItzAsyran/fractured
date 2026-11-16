@@ -28,6 +28,7 @@ public class BedrockCard {
     private int currentContentY;
     private boolean collapsible = false;
     private boolean collapsed = false;
+    private AbstractWidget activeWidget = null;
 
     public BedrockCard(int x, int y, int width, Component title) {
         this.x = x;
@@ -85,7 +86,7 @@ public class BedrockCard {
     }
 
     public BedrockSliderWidget addSlider(Component label, double current, double min, double max,
-                                         boolean isInteger, Function<Double, Component> formatter,
+                                         boolean isInteger, double step, Function<Double, Component> formatter,
                                          Consumer<Double> onChange, Runnable onFocus) {
         int sliderX = x + 12;
         int sliderY = y + currentContentY;
@@ -93,7 +94,7 @@ public class BedrockCard {
         int sliderHeight = 26;
 
         BedrockSliderWidget slider = new BedrockSliderWidget(
-                sliderX, sliderY, sliderWidth, sliderHeight, label, current, min, max, isInteger,
+                sliderX, sliderY, sliderWidth, sliderHeight, label, current, min, max, isInteger, step,
                 formatter,
                 val -> {
                     if (onFocus != null) onFocus.run();
@@ -103,6 +104,12 @@ public class BedrockCard {
         children.add(slider);
         currentContentY += sliderHeight + 6;
         return slider;
+    }
+
+    public BedrockSliderWidget addSlider(Component label, double current, double min, double max,
+                                         boolean isInteger, Function<Double, Component> formatter,
+                                         Consumer<Double> onChange, Runnable onFocus) {
+        return addSlider(label, current, min, max, isInteger, isInteger ? 1.0D : 0.05D, formatter, onChange, onFocus);
     }
 
     public BedrockButton addButton(Component label, BedrockButton.Style style, Runnable onPress) {
@@ -182,7 +189,8 @@ public class BedrockCard {
             return false;
         }
         for (AbstractWidget child : children) {
-            if (child.mouseClicked(event, doubleClick)) {
+            if (child.isMouseOver(mouseX, mouseY) && child.mouseClicked(event, doubleClick)) {
+                this.activeWidget = child;
                 return true;
             }
         }
@@ -193,10 +201,10 @@ public class BedrockCard {
         if (collapsible && collapsed) {
             return false;
         }
-        for (AbstractWidget child : children) {
-            if (child.mouseReleased(event)) {
-                return true;
-            }
+        if (activeWidget != null) {
+            boolean result = activeWidget.mouseReleased(event);
+            activeWidget = null;
+            return result;
         }
         return false;
     }
@@ -205,10 +213,8 @@ public class BedrockCard {
         if (collapsible && collapsed) {
             return false;
         }
-        for (AbstractWidget child : children) {
-            if (child.mouseDragged(event, dragX, dragY)) {
-                return true;
-            }
+        if (activeWidget != null) {
+            return activeWidget.mouseDragged(event, dragX, dragY);
         }
         return false;
     }

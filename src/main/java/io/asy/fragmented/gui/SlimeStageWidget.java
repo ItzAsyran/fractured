@@ -6,14 +6,20 @@ import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.narration.NarrationElementOutput;
-import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 import net.minecraft.client.input.MouseButtonEvent;
+import net.minecraft.client.renderer.entity.EntityRenderDispatcher;
+import net.minecraft.client.renderer.entity.EntityRenderer;
+import net.minecraft.client.renderer.entity.state.EntityRenderState;
+import net.minecraft.client.renderer.entity.state.LivingEntityRenderState;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.EntitySpawnReason;
 import net.minecraft.world.entity.EntityTypes;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.monster.cubemob.Slime;
 import net.minecraft.world.level.Level;
+import org.joml.Quaternionf;
+import org.joml.Vector3f;
 
 public class SlimeStageWidget extends AbstractWidget {
     public enum PreviewMode {
@@ -41,6 +47,7 @@ public class SlimeStageWidget extends AbstractWidget {
     private float rotY = 0.0F;
     private float rotX = 0.0F;
     private float zoom = 1.0F;
+    private Integer customSlimeSize = null;
     private Slime previewSlime;
     private Level lastLevel;
 
@@ -56,6 +63,14 @@ public class SlimeStageWidget extends AbstractWidget {
         this.mode = mode;
     }
 
+    public void setPreviewSlimeSize(int size) {
+        this.customSlimeSize = size;
+    }
+
+    public void clearCustomSlimeSize() {
+        this.customSlimeSize = null;
+    }
+
     public void resetView() {
         this.rotY = 0.0F;
         this.rotX = 0.0F;
@@ -63,14 +78,20 @@ public class SlimeStageWidget extends AbstractWidget {
     }
 
     public void adjustZoom(float delta) {
-        this.zoom = Mth.clamp(this.zoom + delta, 0.5F, 2.0F);
+        this.zoom = Mth.clamp(this.zoom + delta, 0.5F, 2.5F);
     }
 
     @Override
-    protected void onDrag(MouseButtonEvent event, double dragX, double dragY) {
+    public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
+        return isMouseOver(event.x(), event.y());
+    }
+
+    @Override
+    public boolean mouseDragged(MouseButtonEvent event, double dragX, double dragY) {
         this.rotY += (float) dragX * 1.5F;
         this.rotX -= (float) dragY * 1.5F;
         this.rotX = Mth.clamp(this.rotX, -60.0F, 60.0F);
+        return true;
     }
 
     private Slime getOrCreateSlime(Level level) {
@@ -78,10 +99,53 @@ public class SlimeStageWidget extends AbstractWidget {
             previewSlime = EntityTypes.SLIME.create(level, EntitySpawnReason.TRIGGERED);
             if (previewSlime != null) {
                 previewSlime.setId(-1000);
+                previewSlime.setPos(0, 0, 0);
             }
             lastLevel = level;
         }
         return previewSlime;
+    }
+
+    @SuppressWarnings("unchecked")
+    private <T extends LivingEntity, S extends EntityRenderState> void renderEntityOnStage(
+            GuiGraphicsExtractor graphics,
+            int x1, int y1, int x2, int y2,
+            float scale,
+            float xOffset, float yOffset, float zOffset,
+            float bodyYaw,
+            T entity) {
+        if (entity == null) {
+            return;
+        }
+
+        EntityRenderDispatcher dispatcher = Minecraft.getInstance().getEntityRenderDispatcher();
+        EntityRenderer<T, S> renderer = (EntityRenderer<T, S>) dispatcher.getRenderer(entity);
+        S renderState = renderer.createRenderState(entity, 1.0F);
+        renderState.shadowPieces.clear();
+        renderState.outlineColor = 0;
+
+        if (renderState instanceof LivingEntityRenderState livingState) {
+            livingState.bodyRot = bodyYaw;
+            livingState.yRot = bodyYaw;
+            livingState.xRot = 0.0F;
+            if (livingState.scale > 0.0F) {
+                livingState.boundingBoxWidth /= livingState.scale;
+                livingState.boundingBoxHeight /= livingState.scale;
+                livingState.scale = 1.0F;
+            }
+        }
+
+        // 3D camera orientation: full 360-degree orbit yaw and pitch tilt
+        Quaternionf cameraRot = new Quaternionf().rotateZ((float) Math.PI);
+        cameraRot.rotateX(rotX * ((float) Math.PI / 180.0F));
+        cameraRot.rotateY(rotY * ((float) Math.PI / 180.0F));
+
+        Vector3f pos = new Vector3f(
+                xOffset,
+                renderState.boundingBoxHeight / 2.0F + yOffset,
+                zOffset);
+
+        graphics.entity(renderState, scale, pos, cameraRot, null, x1, y1, x2, y2);
     }
 
     @Override
@@ -107,7 +171,7 @@ public class SlimeStageWidget extends AbstractWidget {
         graphics.text(font, Component.literal(modeText), x + 14, y + 11, 0xFF47D147, false);
 
         // 3. Interaction hint at bottom
-        graphics.text(font, Component.literal("⟳ Drag to Orbit | Mode: " + (int)(zoom * 100) + "%"),
+        graphics.text(font, Component.literal("⟳ Drag to Orbit | Zoom: " + (int)(zoom * 100) + "%"),
                 x + 10, y + height - 14, 0x80FFFFFF, false);
 
         // 4. Render 3D Entity stage
@@ -121,42 +185,50 @@ public class SlimeStageWidget extends AbstractWidget {
             try {
                 switch (mode) {
                     case AVATAR_SHADERS -> {
-                        int scale = (int) (48 * zoom);
-                        InventoryScreen.extractEntityInInventoryFollowsMouse(
-                                graphics, x1, y1, x2, y2, scale, 0.0F, rotY, rotX, client.player);
+                        float scale = 48.0F * zoom;
+                        renderEntityOnStage(graphics, x1, y1, x2, y2, scale, 0.0F, 0.0F, 0.0F, 180.0F, client.player);
                     }
                     case SLIME_SCALE -> {
                         Slime slime = getOrCreateSlime(client.level);
                         if (slime != null) {
-                            int size = Math.max(1, config.effectiveMaxSlimeSize());
+                            int size = customSlimeSize != null ? Math.max(1, customSlimeSize) : Math.max(1, config.effectiveMaxSlimeSize());
                             slime.setSize(size, false);
-                            int scale = (int) ((24 + size * 4) * zoom);
-                            InventoryScreen.extractEntityInInventoryFollowsMouse(
-                                    graphics, x1, y1, x2, y2, scale, 0.0F, rotY, rotX, slime);
+                            float scale = (22.0F + size * 5.0F) * zoom;
+                            renderEntityOnStage(graphics, x1, y1, x2, y2, scale, 0.0F, 0.0F, 0.0F, 180.0F, slime);
                         }
                     }
                     case MOUNTED_RIDER -> {
-                        int scale = (int) (42 * zoom);
-                        float yOffset = (float) (config.effectiveRiderOffsetYPerSize() * 10.0D);
-                        InventoryScreen.extractEntityInInventoryFollowsMouse(
-                                graphics, x1, y1, x2, y2, scale, yOffset, rotY, rotX, client.player);
+                        Slime slime = getOrCreateSlime(client.level);
+                        if (slime != null) {
+                            slime.setSize(2, false);
+                            float baseScale = 36.0F * zoom;
+
+                            // 1. Render Slime entity
+                            renderEntityOnStage(graphics, x1, y1, x2, y2, baseScale, 0.0F, 0.0F, 0.0F, 180.0F, slime);
+
+                            // 2. Render Player riding atop the slime with interactive rider offsets
+                            float riderX = (float) (config.effectiveRiderOffsetX() * 0.4D);
+                            float riderY = (float) (slime.getBbHeight() * 0.7D + config.effectiveRiderOffsetYPerSize() * 0.35D);
+                            float riderZ = (float) (config.effectiveRiderOffsetZ() * 0.4D);
+                            float playerScale = baseScale * 0.85F;
+
+                            renderEntityOnStage(graphics, x1, y1, x2, y2, playerScale, riderX, riderY, riderZ, 180.0F, client.player);
+                        }
                     }
                     case FLOATING_ITEMS -> {
                         Slime slime = getOrCreateSlime(client.level);
                         if (slime != null) {
                             slime.setSize(2, false);
-                            int scale = (int) (45 * zoom);
-                            InventoryScreen.extractEntityInInventoryFollowsMouse(
-                                    graphics, x1, y1, x2, y2, scale, 0.0F, rotY, rotX, slime);
+                            float scale = 42.0F * zoom;
+                            renderEntityOnStage(graphics, x1, y1, x2, y2, scale, 0.0F, 0.0F, 0.0F, 180.0F, slime);
                         }
                     }
                     case RECOVERY_RING -> {
                         Slime slime = getOrCreateSlime(client.level);
                         if (slime != null) {
                             slime.setSize(1, false);
-                            int scale = (int) (55 * zoom);
-                            InventoryScreen.extractEntityInInventoryFollowsMouse(
-                                    graphics, x1, y1, x2, y2, scale, 0.0F, rotY, rotX, slime);
+                            float scale = 50.0F * zoom;
+                            renderEntityOnStage(graphics, x1, y1, x2, y2, scale, 0.0F, 0.0F, 0.0F, 180.0F, slime);
                         }
                     }
                 }

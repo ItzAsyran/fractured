@@ -4,6 +4,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.AbstractSliderButton;
+import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.Mth;
 
@@ -17,26 +18,78 @@ public class BedrockSliderWidget extends AbstractSliderButton {
 
     private final double min;
     private final double max;
+    private final double step;
     private final Function<Double, Component> valueFormatter;
     private final Consumer<Double> onValueChange;
     private final boolean isInteger;
 
     public BedrockSliderWidget(int x, int y, int width, int height, Component label,
-                               double current, double min, double max, boolean isInteger,
+                               double current, double min, double max, boolean isInteger, double step,
                                Function<Double, Component> valueFormatter,
                                Consumer<Double> onValueChange) {
-        super(x, y, width, height, label, Mth.clamp((current - min) / (max - min), 0.0D, 1.0D));
+        super(x, y, width, height, label, (max > min) ? Mth.clamp((current - min) / (max - min), 0.0D, 1.0D) : 0.0D);
         this.min = min;
         this.max = max;
         this.isInteger = isInteger;
+        this.step = step > 0 ? step : (isInteger ? 1.0D : 0.05D);
         this.valueFormatter = valueFormatter;
         this.onValueChange = onValueChange;
-        updateMessage();
+        // Snap initial value
+        setValue(this.value);
+    }
+
+    public BedrockSliderWidget(int x, int y, int width, int height, Component label,
+                               double current, double min, double max, boolean isInteger,
+                               Function<Double, Component> valueFormatter,
+                               Consumer<Double> onValueChange) {
+        this(x, y, width, height, label, current, min, max, isInteger, isInteger ? 1.0D : 0.05D, valueFormatter, onValueChange);
     }
 
     public double getActualValue() {
         double val = min + this.value * (max - min);
+        if (step > 0) {
+            val = min + Math.round((val - min) / step) * step;
+        }
         return isInteger ? Math.round(val) : val;
+    }
+
+    @Override
+    protected void setValue(double d) {
+        double raw = min + Mth.clamp(d, 0.0D, 1.0D) * (max - min);
+        double snapped = raw;
+        if (step > 0.0D) {
+            snapped = min + Math.round((raw - min) / step) * step;
+        } else if (isInteger) {
+            snapped = Math.round(raw);
+        }
+        snapped = Mth.clamp(snapped, min, max);
+        double normalized = (max > min) ? (snapped - min) / (max - min) : 0.0D;
+
+        double old = this.value;
+        this.value = normalized;
+        if (old != this.value) {
+            this.applyValue();
+        }
+        this.updateMessage();
+    }
+
+    private void setValueFromMouse(MouseButtonEvent event) {
+        int trackX = getX() + 4;
+        int trackWidth = width - 8;
+        if (trackWidth > 0) {
+            double normalized = (event.x() - trackX) / (double) trackWidth;
+            this.setValue(normalized);
+        }
+    }
+
+    @Override
+    public void onClick(MouseButtonEvent event, boolean doubleClick) {
+        setValueFromMouse(event);
+    }
+
+    @Override
+    protected void onDrag(MouseButtonEvent event, double dragX, double dragY) {
+        setValueFromMouse(event);
     }
 
     @Override

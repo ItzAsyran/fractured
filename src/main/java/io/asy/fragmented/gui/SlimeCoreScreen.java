@@ -44,6 +44,7 @@ public class SlimeCoreScreen extends Screen {
     private int rightWidth;
     private int contentHeight;
     private int scrollY = 0;
+    private boolean isDraggingStage = false;
 
     public SlimeCoreScreen(Screen parent) {
         super(Component.literal("The Slime Core"));
@@ -163,6 +164,10 @@ public class SlimeCoreScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+        if (stageWidget != null && stageWidget.isMouseOver(mouseX, mouseY)) {
+            stageWidget.adjustZoom((float) (scrollY * 0.1F));
+            return true;
+        }
         if (mouseX >= rightX && mouseX <= width && mouseY >= contentY && mouseY <= contentY + contentHeight) {
             SlimeCoreTab current = tabs.get(activeTab);
             int maxScroll = Math.max(0, current.getTotalHeight() - contentHeight + 20);
@@ -175,6 +180,11 @@ public class SlimeCoreScreen extends Screen {
 
     @Override
     public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
+        if (stageWidget != null && stageWidget.isMouseOver(event.x(), event.y())) {
+            this.isDraggingStage = true;
+            return stageWidget.mouseClicked(event, doubleClick);
+        }
+        this.isDraggingStage = false;
         if (event.x() >= rightX && event.x() <= width && event.y() >= contentY && event.y() <= contentY + contentHeight) {
             if (activeTab >= 0 && activeTab < tabs.size()) {
                 if (tabs.get(activeTab).mouseClicked(event, doubleClick)) {
@@ -187,6 +197,13 @@ public class SlimeCoreScreen extends Screen {
 
     @Override
     public boolean mouseReleased(MouseButtonEvent event) {
+        if (isDraggingStage) {
+            this.isDraggingStage = false;
+            if (stageWidget != null) {
+                stageWidget.mouseReleased(event);
+            }
+            return true;
+        }
         if (activeTab >= 0 && activeTab < tabs.size()) {
             if (tabs.get(activeTab).mouseReleased(event)) {
                 return true;
@@ -197,6 +214,9 @@ public class SlimeCoreScreen extends Screen {
 
     @Override
     public boolean mouseDragged(MouseButtonEvent event, double dragX, double dragY) {
+        if (isDraggingStage && stageWidget != null) {
+            return stageWidget.mouseDragged(event, dragX, dragY);
+        }
         if (activeTab >= 0 && activeTab < tabs.size()) {
             if (tabs.get(activeTab).mouseDragged(event, dragX, dragY)) {
                 return true;
