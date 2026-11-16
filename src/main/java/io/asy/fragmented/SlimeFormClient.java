@@ -36,13 +36,11 @@ public final class SlimeFormClient implements ClientModInitializer {
     private static final KeyMapping HIGHLIGHT_SLIMES_KEY = KeyMappingHelper.registerKeyMapping(
             new KeyMapping(
                     "key.slimeform.highlight_nearby",
-                    InputConstants.Type.KEYBOARD,
                     InputConstants.KEY_G,
                     CONTROLS_CATEGORY));
     public static final KeyMapping MORPH_KEY = KeyMappingHelper.registerKeyMapping(
             new KeyMapping(
                     "key.slimeform.morph",
-                    InputConstants.Type.KEYBOARD,
                     InputConstants.KEY_H,
                     CONTROLS_CATEGORY));
     private static SlimeFormClient instance;
@@ -51,6 +49,8 @@ public final class SlimeFormClient implements ClientModInitializer {
     private static final Map<Integer, SlimeAppearanceSettings> playerAppearanceSettings = new HashMap<>();
     private final Map<Integer, Boolean> highlightedEntities = new HashMap<>();
     private boolean wakeSent;
+    private boolean recoveryCycleAttackWasDown;
+    private boolean recoveryCycleUseWasDown;
     private int morphPhase;
     private int morphRemaining;
     private int morphTotal;
@@ -116,10 +116,35 @@ public final class SlimeFormClient implements ClientModInitializer {
                 this::renderDormantHud);
     }
 
+    /**
+     * While spectating, left click asks the server for the next recovery fragment and right
+     * click for the previous one. The server ignores this unless the player is in a recovery.
+     * Only the moment a button goes down counts, so holding a button cycles once.
+     */
+    private void sendRecoveryCycleInput(Minecraft client) {
+        // No screen check needed: while any screen is open Minecraft releases all key
+        // mappings, so isDown() below is already false.
+        boolean spectating = client.player.isSpectator();
+        boolean attackDown = spectating && client.options.keyAttack.isDown();
+        boolean useDown = spectating && client.options.keyUse.isDown();
+        if (ClientPlayNetworking.canSend(SlimeFormPayloads.RECOVERY_CYCLE_TYPE)) {
+            if (attackDown && !recoveryCycleAttackWasDown) {
+                ClientPlayNetworking.send(new SlimeFormPayloads.RecoveryCyclePayload(true));
+            }
+            if (useDown && !recoveryCycleUseWasDown) {
+                ClientPlayNetworking.send(new SlimeFormPayloads.RecoveryCyclePayload(false));
+            }
+        }
+        recoveryCycleAttackWasDown = attackDown;
+        recoveryCycleUseWasDown = useDown;
+    }
+
     private void tick(Minecraft client) {
         if (client.player == null) {
             clearHighlightedEntities(client);
             wakeSent = false;
+            recoveryCycleAttackWasDown = false;
+            recoveryCycleUseWasDown = false;
             morphPhase = 0;
             morphRemaining = 0;
             morphTotal = 0;
@@ -134,6 +159,7 @@ public final class SlimeFormClient implements ClientModInitializer {
         }
 
         updateHighlightedEntities(client);
+        sendRecoveryCycleInput(client);
 
         SlimeFormConfig config = SlimeFormConfig.get();
         boolean active = SlimeFormState.isClientVisualSlimeForm(client.player);
@@ -184,8 +210,12 @@ public final class SlimeFormClient implements ClientModInitializer {
         return instance != null && instance.morphPhase != 0;
     }
 
+    /**
+     * The real morph body exists (and is controlled) for every non-idle phase,
+     * including ENTERING and RETURNING.
+     */
     public static boolean isLocalMorphBodyActive() {
-        return instance != null && (instance.morphPhase == 2 || instance.morphPhase == 3);
+        return instance != null && instance.morphPhase != 0;
     }
 
     /**

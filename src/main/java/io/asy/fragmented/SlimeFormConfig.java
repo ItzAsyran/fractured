@@ -11,8 +11,6 @@ public class SlimeFormConfig implements me.shedaniel.autoconfig.ConfigData {
     public static final int MAX_MAX_SLIME_SIZE = 10;
     public static final int MIN_SPLIT_DURATION_SECONDS = 1;
     public static final int MAX_SPLIT_DURATION_SECONDS = 300;
-    public static final int MIN_RECOVERY_REFORM_SAFETY_RADIUS = 1;
-    public static final int MAX_RECOVERY_REFORM_SAFETY_RADIUS = 32;
     public static final int MIN_SLIME_BALLS_REQUIRED = 1;
     public static final int MAX_SLIME_BALLS_REQUIRED = 64;
     public static final int MIN_SLIME_CHUNK_CHANCE = 0;
@@ -52,13 +50,10 @@ public class SlimeFormConfig implements me.shedaniel.autoconfig.ConfigData {
     public boolean recoveryLineageDebug = false;
 
     @ConfigEntry.Gui.Tooltip
-    @ConfigEntry.BoundedDiscrete(
-            min = MIN_RECOVERY_REFORM_SAFETY_RADIUS,
-            max = MAX_RECOVERY_REFORM_SAFETY_RADIUS)
-    public int recoveryReformSafetyRadius = 12;
+    public boolean recoveryHostileReformBlock = true;
 
     @ConfigEntry.Gui.Tooltip
-    public boolean recoveryHostileReformBlock = true;
+    public boolean recoveryReformCost = true;
 
     @ConfigEntry.Gui.Tooltip
     @ConfigEntry.BoundedDiscrete(min = MIN_SLIME_BALLS_REQUIRED, max = MAX_SLIME_BALLS_REQUIRED)
@@ -105,7 +100,6 @@ public class SlimeFormConfig implements me.shedaniel.autoconfig.ConfigData {
     public double itemDisplayRotationY = 0.0D;
     public double itemDisplayRotationZ = 0.0D;
     public double itemDisplayBobAmplitude = 0.01D;
-    public boolean itemDebugShowAxes = false;
 
     public boolean doPhaseEnabled = false;
 
@@ -166,13 +160,6 @@ public class SlimeFormConfig implements me.shedaniel.autoconfig.ConfigData {
 
     public int effectiveSplitDurationSeconds() {
         return clamp(splitDurationSeconds, MIN_SPLIT_DURATION_SECONDS, MAX_SPLIT_DURATION_SECONDS);
-    }
-
-    public int effectiveRecoveryReformSafetyRadius() {
-        return clamp(
-                recoveryReformSafetyRadius,
-                MIN_RECOVERY_REFORM_SAFETY_RADIUS,
-                MAX_RECOVERY_REFORM_SAFETY_RADIUS);
     }
 
     public int effectiveSlimeBallsRequired() {

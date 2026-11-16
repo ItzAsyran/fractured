@@ -22,9 +22,7 @@
 		"SlimeFormPlayerSoundMixin",
 		"SlimeFormPlayerStepSoundMixin",
 		"SlimeFormWaterMixin",
-		"SlimeMorphPeacefulMixin",
-		"SlimeMorphDebugRemoveMixin",
-		"SlimeMorphPeacefulGuardMixin",
+		"SlimePeacefulGuardMixin",
 		"SlimeBallConsumptionMixin",
 		"SlimePetAttackMixin",
 		"SlimePlayerLifecycleMixin",
@@ -46,6 +44,7 @@
 		"SlimeMorphClientInputAccess",
 		"SlimeMorphInputMixin",
 		"SlimeMorphCameraMixin",
+		"SlimeMorphViewVectorMixin",
 		"SlimeRecoveryDebugRendererMixin",
 		"SlimeDeathScreenMixin",
 		"SlimeClientRecoveryMixin",
@@ -59,7 +58,8 @@
 		"SlimeAppearanceArmorRendererMixin",
 		"SlimeCosmeticaAccessoryLayerMixin",
 		"SlimeCosmeticaModelMixin",
-		"SlimeMorphRendererMixin"
+		"SlimeAppearanceHandContextMixin",
+		"SlimeAppearanceHandRendererMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

@@ -10,6 +10,7 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.gen.Invoker;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.ModifyArg;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(Camera.class)
@@ -28,11 +29,26 @@ public abstract class SlimeMorphCameraMixin {
         LocalPlayer player = Minecraft.getInstance().player;
         if (player != null && camera.entity() instanceof Slime
                 && SlimeFormClient.isLocalMorphBodyActive()) {
-            boolean mirror = false;
-            float yRot = player.getViewYRot(partialTick) + (mirror ? 180.0F : 0.0F);
-            float xRot = mirror ? -player.getViewXRot(partialTick) : player.getViewXRot(partialTick);
-            slimeform$setRotation(yRot, xRot);
+            slimeform$setRotation(
+                    player.getViewYRot(partialTick), player.getViewXRot(partialTick));
         }
+    }
+
+    // Third person pulls back a fixed 4 blocks; scale that with the slime so big bodies do not
+    // fill the screen. require = 0: if the call is not found the distance simply stays vanilla.
+    @ModifyArg(
+            method = "alignWithEntity",
+            at = @At(
+                    value = "INVOKE",
+                    target = "Lnet/minecraft/client/Camera;getMaxZoom(F)F"),
+            index = 0,
+            require = 0)
+    private float slimeform$scaleThirdPersonDistance(float distance) {
+        Camera camera = (Camera) (Object) this;
+        if (camera.entity() instanceof Slime slime && SlimeFormClient.isLocalMorphBodyActive()) {
+            return distance * Math.max(1.0F, 0.6F + 0.5F * slime.getBbWidth());
+        }
+        return distance;
     }
 
     @Inject(method = "update", at = @At("TAIL"))

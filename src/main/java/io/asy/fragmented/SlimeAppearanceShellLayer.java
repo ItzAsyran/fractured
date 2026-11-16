@@ -3,16 +3,28 @@ package io.asy.fragmented;
 import net.minecraft.client.model.player.PlayerModel;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.LivingEntityRenderer;
-import net.minecraft.client.renderer.entity.SlimeRenderer;
 import net.minecraft.client.renderer.entity.RenderLayerParent;
 import net.minecraft.client.renderer.entity.layers.RenderLayer;
 import net.minecraft.client.renderer.entity.state.AvatarRenderState;
+import net.minecraft.resources.Identifier;
 import net.minecraft.client.renderer.rendertype.RenderTypes;
 import net.minecraft.util.ARGB;
 import com.mojang.blaze3d.vertex.PoseStack;
 
-/** Adds the vanilla translucent slime texture over a slightly expanded player silhouette. */
+/**
+ * Wraps the whole player in a translucent slime shell: the player model drawn again, slightly
+ * expanded, with a texture that covers every part of the skin layout.
+ *
+ * <p>The vanilla slime texture only lines up with the head area of the player model (the body,
+ * arms and legs map onto empty parts of it), so it left most of the body uncovered. The mod's own
+ * {@code slime_shell.png} is filled across the whole 64x64 layout, so every face is covered.
+ */
 public final class SlimeAppearanceShellLayer extends RenderLayer<AvatarRenderState, PlayerModel> {
+    static final Identifier SHELL_TEXTURE = Identifier.fromNamespaceAndPath(
+            SlimeFormMod.MOD_ID, "textures/entity/slime_shell.png");
+    /** The shell is drawn this much larger than the player model so it wraps the skin. */
+    static final float SHELL_SCALE = 1.035F;
+
     public SlimeAppearanceShellLayer(RenderLayerParent<AvatarRenderState, PlayerModel> parent) {
         super(parent);
     }
@@ -33,12 +45,12 @@ public final class SlimeAppearanceShellLayer extends RenderLayer<AvatarRenderSta
         }
 
         poseStack.pushPose();
-        poseStack.scale(1.035F, 1.035F, 1.035F);
+        poseStack.scale(SHELL_SCALE, SHELL_SCALE, SHELL_SCALE);
         collector.order(1).submitModel(
                 getParentModel(),
                 state,
                 poseStack,
-                RenderTypes.entityTranslucent(SlimeRenderer.SLIME_LOCATION),
+                RenderTypes.entityTranslucent(SHELL_TEXTURE),
                 packedLight,
                 LivingEntityRenderer.getOverlayCoords(state, 0.0F),
                 ARGB.white(opacity),
