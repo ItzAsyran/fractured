@@ -258,7 +258,7 @@ public final class SlimeFormClient implements ClientModInitializer {
 
     public static SlimeAppearanceSettings getPlayerAppearanceSettings(Player player) {
         Minecraft client = Minecraft.getInstance();
-        if (player == client.player) {
+        if (player == client.player || player instanceof io.asy.fragmented.gui.SlimePreviewPlayer) {
             return SlimeAppearanceSettings.fromConfig(SlimeFormConfig.get());
         }
         return playerAppearanceSettings.getOrDefault(player.getId(), SlimeAppearanceSettings.DEFAULT);

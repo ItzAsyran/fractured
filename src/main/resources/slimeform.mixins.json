@@ -59,7 +59,8 @@
 		"SlimeCosmeticaAccessoryLayerMixin",
 		"SlimeCosmeticaModelMixin",
 		"SlimeAppearanceHandContextMixin",
-		"SlimeAppearanceHandRendererMixin"
+		"SlimeAppearanceHandRendererMixin",
+		"EntityRenderDispatcherAccessor"
 	],
 	"injectors": {
 		"defaultRequire": 1

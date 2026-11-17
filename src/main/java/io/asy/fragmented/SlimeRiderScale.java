@@ -24,6 +24,34 @@ public final class SlimeRiderScale {
     private SlimeRiderScale() {
     }
 
+    public static double getScaleForSlimeSize(int slimeSize) {
+        int clampedSize = Math.max(1, slimeSize);
+        return Math.min(
+                MAXIMUM_PLAYER_SCALE,
+                MINIMUM_PLAYER_SCALE + (clampedSize - 1) * PLAYER_SCALE_PER_SLIME_SIZE);
+    }
+
+    public static void applyRiderScale(net.minecraft.world.entity.LivingEntity entity, int slimeSize) {
+        AttributeInstance scaleAttribute = entity.getAttribute(Attributes.SCALE);
+        if (scaleAttribute == null) {
+            return;
+        }
+        double playerScale = getScaleForSlimeSize(slimeSize);
+        scaleAttribute.addOrUpdateTransientModifier(new AttributeModifier(
+                RIDER_SCALE_MODIFIER_ID,
+                playerScale - 1.0D,
+                AttributeModifier.Operation.ADD_MULTIPLIED_TOTAL));
+        entity.refreshDimensions();
+    }
+
+    public static void removeRiderScale(net.minecraft.world.entity.LivingEntity entity) {
+        AttributeInstance scaleAttribute = entity.getAttribute(Attributes.SCALE);
+        if (scaleAttribute != null) {
+            scaleAttribute.removeModifier(RIDER_SCALE_MODIFIER_ID);
+            entity.refreshDimensions();
+        }
+    }
+
     public static void tick(ServerPlayer player) {
         AttributeInstance scaleAttribute = player.getAttribute(Attributes.SCALE);
         if (scaleAttribute == null) {
@@ -36,27 +64,16 @@ public final class SlimeRiderScale {
             int slimeSize = Math.max(1, slime.getSize());
             Integer appliedSize = APPLIED_SLIME_SIZES.get(playerId);
             if (appliedSize == null || appliedSize != slimeSize) {
-                double playerScale = Math.min(
-                        MAXIMUM_PLAYER_SCALE,
-                        MINIMUM_PLAYER_SCALE + (slimeSize - 1) * PLAYER_SCALE_PER_SLIME_SIZE);
-                scaleAttribute.addOrUpdateTransientModifier(new AttributeModifier(
-                        RIDER_SCALE_MODIFIER_ID,
-                        playerScale - 1.0D,
-                        AttributeModifier.Operation.ADD_MULTIPLIED_TOTAL));
-                player.refreshDimensions();
+                applyRiderScale(player, slimeSize);
                 APPLIED_SLIME_SIZES.put(playerId, slimeSize);
             }
         } else if (APPLIED_SLIME_SIZES.remove(playerId) != null) {
-            scaleAttribute.removeModifier(RIDER_SCALE_MODIFIER_ID);
-            player.refreshDimensions();
+            removeRiderScale(player);
         }
     }
 
     public static void clear(ServerPlayer player) {
         APPLIED_SLIME_SIZES.remove(player.getUUID());
-        AttributeInstance scaleAttribute = player.getAttribute(Attributes.SCALE);
-        if (scaleAttribute != null) {
-            scaleAttribute.removeModifier(RIDER_SCALE_MODIFIER_ID);
-        }
+        removeRiderScale(player);
     }
 }
