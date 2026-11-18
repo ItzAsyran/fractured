@@ -50,6 +50,21 @@ public final class SlimeFormClient implements ClientModInitializer {
                     InputConstants.Type.KEYBOARD,
                     InputConstants.KEY_K,
                     CONTROLS_CATEGORY));
+    public static final KeyMapping ABSORB_CYCLE_PREV_KEY = KeyMappingHelper.registerKeyMapping(
+            new KeyMapping(
+                    "key.slimeform.absorb_cycle_prev",
+                    InputConstants.KEY_LBRACKET,
+                    CONTROLS_CATEGORY));
+    public static final KeyMapping ABSORB_CYCLE_NEXT_KEY = KeyMappingHelper.registerKeyMapping(
+            new KeyMapping(
+                    "key.slimeform.absorb_cycle_next",
+                    InputConstants.KEY_RBRACKET,
+                    CONTROLS_CATEGORY));
+    public static final KeyMapping ABSORB_CONFIRM_KEY = KeyMappingHelper.registerKeyMapping(
+            new KeyMapping(
+                    "key.slimeform.absorb_confirm",
+                    InputConstants.KEY_V,
+                    CONTROLS_CATEGORY));
     private static SlimeFormClient instance;
     private static volatile boolean slimeChunksEnabled;
     private static volatile List<SlimeFormPayloads.AuraSource> slimeChunkSources = List.of();
@@ -65,6 +80,13 @@ public final class SlimeFormClient implements ClientModInitializer {
     private boolean dormantDebugVisible;
     private int dormantDebugRemainingTicks;
     private long dormantDebugLastUpdateTick;
+    private static float trappedStruggleProgress = -1.0F;
+    private static net.minecraft.client.CameraType previousTrappedCameraType;
+    private static int bossQteBossId = -1;
+    private static String bossQteHazardName = "";
+    private static int bossQteDurationTicks = 0;
+    private static int bossQteRemainingTicks = 0;
+    private static boolean bossQteActive = false;
 
     @Override
     public void onInitializeClient() {
@@ -110,12 +132,60 @@ public final class SlimeFormClient implements ClientModInitializer {
                         playerAppearanceSettings.remove(payload.entityId());
                     }
                 }));
+        ClientPlayNetworking.registerGlobalReceiver(
+                SlimeFormPayloads.ABSORB_SYNC_TYPE,
+                (payload, context) -> context.client().execute(() -> {
+                    Minecraft mc = context.client();
+                    boolean wasTrapped = mc.player != null && SlimeAbsorbClientState.isTrapped(mc.player.getId());
+                    SlimeAbsorbClientState.update(
+                            payload.holderEntityId(), payload.ownerEntityId(), payload.trappedEntityIds(), payload.digestingEntityIds());
+                    boolean isTrapped = mc.player != null && SlimeAbsorbClientState.isTrapped(mc.player.getId());
+                    if (!wasTrapped && isTrapped) {
+                        if (mc.options.getCameraType() == net.minecraft.client.CameraType.FIRST_PERSON) {
+                            previousTrappedCameraType = mc.options.getCameraType();
+                            mc.options.setCameraType(net.minecraft.client.CameraType.THIRD_PERSON_BACK);
+                        }
+                    } else if (wasTrapped && !isTrapped) {
+                        if (previousTrappedCameraType != null) {
+                            mc.options.setCameraType(previousTrappedCameraType);
+                            previousTrappedCameraType = null;
+                        }
+                    }
+                }));
+        ClientPlayNetworking.registerGlobalReceiver(
+                SlimeFormPayloads.STRUGGLE_SYNC_TYPE,
+                (payload, context) -> context.client().execute(() -> {
+                    trappedStruggleProgress = payload.progress();
+                    if (trappedStruggleProgress < 0.0F && previousTrappedCameraType != null) {
+                        context.client().options.setCameraType(previousTrappedCameraType);
+                        previousTrappedCameraType = null;
+                    }
+                }));
+        ClientPlayNetworking.registerGlobalReceiver(
+                SlimeFormPayloads.BOSS_QTE_SYNC_TYPE,
+                (payload, context) -> context.client().execute(() -> {
+                    bossQteBossId = payload.bossEntityId();
+                    bossQteHazardName = payload.hazardName();
+                    bossQteDurationTicks = payload.qteDurationTicks();
+                    bossQteRemainingTicks = payload.qteDurationTicks();
+                    bossQteActive = payload.active();
+                }));
+        ClientPlayNetworking.registerGlobalReceiver(
+                SlimeFormPayloads.MUTATION_SYNC_TYPE,
+                (payload, context) -> context.client().execute(() -> {
+                    SlimeFormState.setClientMutations(payload.mutations());
+                }));
         ClientPlayConnectionEvents.JOIN.register((handler, sender, client) ->
                 client.execute(SlimeFormClient::syncPlayerAppearance));
         ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {
             playerAppearanceSettings.clear();
             slimeChunksEnabled = false;
             slimeChunkSources = List.of();
+            SlimeAbsorbClientState.clear();
+            trappedStruggleProgress = -1.0F;
+            previousTrappedCameraType = null;
+            bossQteActive = false;
+            bossQteRemainingTicks = 0;
         });
         HudElementRegistry.attachElementAfter(
                 VanillaHudElements.BOSS_BAR,
@@ -125,6 +195,18 @@ public final class SlimeFormClient implements ClientModInitializer {
                 VanillaHudElements.BOSS_BAR,
                 Identifier.fromNamespaceAndPath(SlimeFormMod.MOD_ID, "dormant_hud"),
                 this::renderDormantHud);
+        HudElementRegistry.attachElementAfter(
+                VanillaHudElements.BOSS_BAR,
+                Identifier.fromNamespaceAndPath(SlimeFormMod.MOD_ID, "absorb_hud"),
+                this::renderAbsorbHud);
+        HudElementRegistry.attachElementAfter(
+                VanillaHudElements.BOSS_BAR,
+                Identifier.fromNamespaceAndPath(SlimeFormMod.MOD_ID, "struggle_hud"),
+                this::renderStruggleHud);
+        HudElementRegistry.attachElementAfter(
+                VanillaHudElements.BOSS_BAR,
+                Identifier.fromNamespaceAndPath(SlimeFormMod.MOD_ID, "boss_qte_hud"),
+                this::renderBossQteHud);
     }
 
     /**
@@ -195,6 +277,62 @@ public final class SlimeFormClient implements ClientModInitializer {
                     client.options.keyRight.isDown(),
                     client.player.getYRot(),
                     client.player.getXRot()));
+        }
+
+        if (trappedStruggleProgress >= 0.0F) {
+            while (client.options.keyJump.consumeClick()) {
+                if (ClientPlayNetworking.canSend(SlimeFormPayloads.STRUGGLE_JUMP_TYPE)) {
+                    ClientPlayNetworking.send(new SlimeFormPayloads.StruggleJumpPayload());
+                }
+            }
+        }
+
+        if (bossQteActive) {
+            if (bossQteRemainingTicks > 0) {
+                bossQteRemainingTicks--;
+            } else {
+                bossQteActive = false;
+            }
+            while (ABSORB_CONFIRM_KEY.consumeClick()) {
+                if (ClientPlayNetworking.canSend(SlimeFormPayloads.ABSORB_ACTION_TYPE)) {
+                    ClientPlayNetworking.send(new SlimeFormPayloads.AbsorbActionPayload(
+                            SlimeFormPayloads.AbsorbActionPayload.ACTION_BRACE, bossQteBossId));
+                }
+            }
+        }
+
+        if (client.player != null && SlimeAbsorbClientState.isHolding(client.player.getId())) {
+            int playerId = client.player.getId();
+            boolean shift = InputConstants.isKeyDown(InputConstants.KEY_LSHIFT)
+                    || InputConstants.isKeyDown(InputConstants.KEY_RSHIFT)
+                    || client.options.keyShift.isDown();
+
+            while (ABSORB_CYCLE_PREV_KEY.consumeClick()) {
+                if (shift) {
+                    SlimeAbsorbClientState.cycleSelectedEntity(playerId, -1);
+                } else {
+                    int selected = SlimeAbsorbClientState.getSelectedEntityId(playerId);
+                    SlimeAbsorbClientState.cycleMode(selected);
+                }
+            }
+            while (ABSORB_CYCLE_NEXT_KEY.consumeClick()) {
+                if (shift) {
+                    SlimeAbsorbClientState.cycleSelectedEntity(playerId, 1);
+                } else {
+                    int selected = SlimeAbsorbClientState.getSelectedEntityId(playerId);
+                    SlimeAbsorbClientState.cycleMode(selected);
+                }
+            }
+            while (ABSORB_CONFIRM_KEY.consumeClick()) {
+                int targetId = SlimeAbsorbClientState.getSelectedEntityId(playerId);
+                int action = (SlimeAbsorbClientState.getMode() == SlimeAbsorbClientState.AbsorbMode.DISSOLVE
+                        && SlimeAbsorbClientState.canDissolve(targetId))
+                        ? SlimeFormPayloads.AbsorbActionPayload.ACTION_DISSOLVE
+                        : SlimeFormPayloads.AbsorbActionPayload.ACTION_EJECT;
+                if (ClientPlayNetworking.canSend(SlimeFormPayloads.ABSORB_ACTION_TYPE)) {
+                    ClientPlayNetworking.send(new SlimeFormPayloads.AbsorbActionPayload(action, targetId));
+                }
+            }
         }
 
         if (!SlimeFormMod.isDormant(client.player)) {
@@ -303,6 +441,11 @@ public final class SlimeFormClient implements ClientModInitializer {
         if (!instance.highlightedEntities.containsKey(entityId)) {
             return -1;
         }
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player != null && SlimeFormState.hasMutation(mc.player, SlimeFormState.MUTATION_WARDEN)
+                && (!slimeChunksEnabled || !HIGHLIGHT_SLIMES_KEY.isDown())) {
+            return 0x00E5D3;
+        }
         if (entity instanceof Slime) {
             return SLIME_HIGHLIGHT_COLOR;
         }
@@ -316,23 +459,43 @@ public final class SlimeFormClient implements ClientModInitializer {
     }
 
     private void updateHighlightedEntities(Minecraft client) {
-        if (!slimeChunksEnabled || !HIGHLIGHT_SLIMES_KEY.isDown()) {
+        boolean sculkTremorsense = client.player != null && SlimeFormState.hasMutation(client.player, SlimeFormState.MUTATION_WARDEN);
+        boolean keyAuraActive = slimeChunksEnabled && HIGHLIGHT_SLIMES_KEY.isDown();
+
+        if (!keyAuraActive && !sculkTremorsense) {
             clearHighlightedEntities(client);
             return;
         }
 
         Set<Integer> current = new HashSet<>();
-        for (SlimeFormPayloads.AuraSource source : slimeChunkSources) {
-            double minX = (source.chunkX() - 8) * 16.0D;
-            double minZ = (source.chunkZ() - 8) * 16.0D;
-            AABB area = new AABB(
-                    minX, client.level.getMinY(), minZ,
-                    minX + 17 * 16.0D, client.level.getMaxY(), minZ + 17 * 16.0D);
+
+        if (sculkTremorsense && client.player != null && client.level != null) {
+            double range = isLocalMorphBodyActive() ? 24.0D : 16.0D;
+            AABB senseArea = client.player.getBoundingBox().inflate(range);
             for (Entity entity : client.level.getEntities(
-                    (Entity) null, area, candidate -> candidate instanceof LivingEntity)) {
-                current.add(entity.getId());
-                if (!highlightedEntities.containsKey(entity.getId())) {
-                    highlightedEntities.put(entity.getId(), true);
+                    client.player, senseArea, e -> e instanceof LivingEntity living && living.isAlive())) {
+                if (entity.getDeltaMovement().horizontalDistanceSqr() > 1.0E-4D || (entity instanceof Player p && p.isSprinting())) {
+                    current.add(entity.getId());
+                    if (!highlightedEntities.containsKey(entity.getId())) {
+                        highlightedEntities.put(entity.getId(), true);
+                    }
+                }
+            }
+        }
+
+        if (keyAuraActive && client.level != null) {
+            for (SlimeFormPayloads.AuraSource source : slimeChunkSources) {
+                double minX = (source.chunkX() - 8) * 16.0D;
+                double minZ = (source.chunkZ() - 8) * 16.0D;
+                AABB area = new AABB(
+                        minX, client.level.getMinY(), minZ,
+                        minX + 17 * 16.0D, client.level.getMaxY(), minZ + 17 * 16.0D);
+                for (Entity entity : client.level.getEntities(
+                        (Entity) null, area, candidate -> candidate instanceof LivingEntity)) {
+                    current.add(entity.getId());
+                    if (!highlightedEntities.containsKey(entity.getId())) {
+                        highlightedEntities.put(entity.getId(), true);
+                    }
                 }
             }
         }
@@ -387,5 +550,220 @@ public final class SlimeFormClient implements ClientModInitializer {
         graphics.fill(x, y, x + width, y + height, 0xAA202020);
         graphics.fill(x, y, x + filled, y + height, 0xFFE5B84B);
         graphics.text(client.font, Component.literal("Entering AFK Mode"), x, y - 12, 0xFFFFFFFF, false);
+    }
+
+    private void renderAbsorbHud(GuiGraphicsExtractor graphics, net.minecraft.client.DeltaTracker tickCounter) {
+        Minecraft client = Minecraft.getInstance();
+        if (client.player == null) {
+            return;
+        }
+
+        int playerId = client.player.getId();
+        if (!SlimeAbsorbClientState.isHolding(playerId)) {
+            return;
+        }
+
+        List<Integer> trappedIds = SlimeAbsorbClientState.getTrappedIds(playerId);
+        if (trappedIds.isEmpty()) {
+            return;
+        }
+
+        int selectedId = SlimeAbsorbClientState.getSelectedEntityId(playerId);
+        Entity selectedEntity = client.level != null ? client.level.getEntity(selectedId) : null;
+        Component entityName = selectedEntity != null
+                ? selectedEntity.getDisplayName()
+                : Component.literal("Unknown");
+
+        // Capacity calculation
+        int size = getClientMorphSize(client.player);
+        double maxCapacity = SlimeAbsorbHelper.getSlimeCapacity(size, SlimeFormConfig.get().effectiveAbsorbCapacityFactor());
+        double heldVolume = 0.0D;
+        if (client.level != null) {
+            for (int id : trappedIds) {
+                Entity e = client.level.getEntity(id);
+                if (e != null) {
+                    heldVolume += SlimeAbsorbHelper.getEntityVolume(e);
+                }
+            }
+        }
+
+        int width = 260;
+        int height = 28;
+        int x = (client.getWindow().getGuiScaledWidth() - width) / 2;
+
+        int bottomMargin = 26;
+        if (client.gameMode != null && client.gameMode.canHurtPlayer()) {
+            float totalHealth = client.player.getMaxHealth() + client.player.getAbsorptionAmount();
+            int healthRows = Math.max(1, (int) Math.ceil(totalHealth / 20.0f));
+            int armorRows = client.player.getArmorValue() > 0 ? 1 : 0;
+            int airRows = (client.player.getAirSupply() < client.player.getMaxAirSupply()) ? 1 : 0;
+            int extraRows = Math.max(healthRows + armorRows, 1 + airRows);
+            bottomMargin = 24 + (extraRows * 10);
+        }
+        int y = Math.max(10, client.getWindow().getGuiScaledHeight() - bottomMargin - height - 4);
+
+        // Bedrock styled dark container
+        graphics.fill(x, y, x + width, y + height, 0xCC181818);
+        graphics.fill(x, y, x + width, y + 1, 0x44FFFFFF);
+        graphics.fill(x, y + height - 1, x + width, y + height, 0x33000000);
+
+        // Mode selector
+        SlimeAbsorbClientState.AbsorbMode mode = SlimeAbsorbClientState.getMode();
+        boolean isEject = mode == SlimeAbsorbClientState.AbsorbMode.EJECT;
+        boolean isDigesting = SlimeAbsorbClientState.isDigesting(selectedId);
+        boolean canDissolve = SlimeAbsorbClientState.canDissolve(selectedId);
+
+        String ejectText = isEject ? "[ EJECT ]" : "  EJECT  ";
+        int ejectColor = isEject ? 0xFF55FF55 : 0xFF888888;
+        graphics.text(client.font, Component.literal(ejectText), x + 8, y + 4, ejectColor, false);
+
+        int sepX = x + 8 + client.font.width(ejectText) + 3;
+        graphics.text(client.font, Component.literal("|"), sepX, y + 4, 0xFF555555, false);
+
+        String rightModeText;
+        int rightModeColor;
+        if (isDigesting || !canDissolve) {
+            rightModeText = "[ DIGESTING ]";
+            rightModeColor = 0xFFFF5555;
+        } else {
+            rightModeText = !isEject ? "[ DISSOLVE ]" : "  DISSOLVE  ";
+            rightModeColor = !isEject ? 0xFFFF5555 : 0xFF888888;
+        }
+        int dissX = sepX + 5;
+        graphics.text(client.font, Component.literal(rightModeText), dissX, y + 4, rightModeColor, false);
+
+        // Selected entity name, counter & remaining health
+        int entityStartX = dissX + client.font.width(rightModeText) + 6;
+        int selectedIndex = trappedIds.indexOf(selectedId) + 1;
+        String countStr = "(" + (selectedIndex > 0 ? selectedIndex : 1) + "/" + trappedIds.size() + ")";
+
+        String hpStr = "";
+        if (selectedEntity instanceof LivingEntity living) {
+            float hp = living.getHealth();
+            float maxHp = living.getMaxHealth();
+            hpStr = String.format(java.util.Locale.ROOT, "%.1f/%.1f HP", Math.max(0.0f, hp), maxHp);
+        }
+
+        String rightLabel = hpStr.isEmpty() ? countStr : countStr + " " + hpStr;
+        int rightLabelWidth = client.font.width(rightLabel);
+        String nameStr = entityName.getString();
+        int maxNameWidth = (x + width - 6) - entityStartX - rightLabelWidth - 4;
+        if (client.font.width(nameStr) > maxNameWidth && maxNameWidth > 12) {
+            nameStr = client.font.plainSubstrByWidth(nameStr, maxNameWidth - 8) + "..";
+        }
+        graphics.text(client.font, Component.literal(nameStr + " " + rightLabel), entityStartX, y + 4, isDigesting ? 0xFFFFAA88 : 0xFFFFFFFF, false);
+
+        // Capacity progress bar
+        int barX = x + 8;
+        int barY = y + 16;
+        int barWidth = width - 16;
+        int barHeight = 3;
+        float progress = maxCapacity > 0.0D ? (float) Math.min(1.0D, heldVolume / maxCapacity) : 0.0F;
+        int filled = (int) (progress * barWidth);
+
+        int barColor = progress >= 0.95F ? 0xFFFF4444 : progress >= 0.75F ? 0xFFFFBB33 : 0xFF55D66F;
+        graphics.fill(barX, barY, barX + barWidth, barY + barHeight, 0xFF333333);
+        if (filled > 0) {
+            graphics.fill(barX, barY, barX + filled, barY + barHeight, barColor);
+        }
+
+        // Capacity and Key hints text
+        String capStr = String.format(java.util.Locale.ROOT, "%.2f/%.2f", heldVolume, maxCapacity);
+        graphics.text(client.font, Component.literal(capStr), barX, y + 20, 0xFFAAAAAA, false);
+
+        String hintStr = "V: Action  [: Mode  Shift+[: Target";
+        int hintWidth = client.font.width(hintStr);
+        graphics.text(client.font, Component.literal(hintStr), x + width - hintWidth - 8, y + 20, 0xFF777777, false);
+    }
+
+    private void renderStruggleHud(GuiGraphicsExtractor graphics, net.minecraft.client.DeltaTracker tickCounter) {
+        Minecraft client = Minecraft.getInstance();
+        if (client.player == null || !client.player.isAlive() || trappedStruggleProgress < 0.0F) {
+            return;
+        }
+
+        int screenWidth = client.getWindow().getGuiScaledWidth();
+        int screenHeight = client.getWindow().getGuiScaledHeight();
+
+        // Subtle edge vignette indicating containment without obstructing the 3D slime body
+        int borderSize = Math.min(48, screenHeight / 6);
+        graphics.fillGradient(0, 0, screenWidth, borderSize, 0x55186020, 0x00186020);
+        graphics.fillGradient(0, screenHeight - borderSize, screenWidth, screenHeight, 0x00186020, 0x55186020);
+        graphics.fillGradient(0, 0, borderSize, screenHeight, 0x55186020, 0x00186020);
+        graphics.fillGradient(screenWidth - borderSize, 0, screenWidth, screenHeight, 0x00186020, 0x55186020);
+
+        int width = 180;
+        int height = 24;
+        int x = (screenWidth - width) / 2;
+        int y = screenHeight - 78;
+
+        // Bedrock styled dark container
+        graphics.fill(x, y, x + width, y + height, 0xCC181818);
+        graphics.fill(x, y, x + width, y + 1, 0x44FFFFFF);
+        graphics.fill(x, y + height - 1, x + width, y + height, 0x33000000);
+
+        // Header text: Title on left, Health readout on right
+        int pct = Math.max(0, Math.min(100, (int) trappedStruggleProgress));
+        String title = String.format(java.util.Locale.ROOT, "BREAKING FREE: %d%%", pct);
+        graphics.text(client.font, Component.literal(title), x + 8, y + 3, 0xFFFFFFFF, false);
+
+        int currentHp = (int) Math.ceil(client.player.getHealth());
+        int maxHp = (int) client.player.getMaxHealth();
+        String hpText = String.format(java.util.Locale.ROOT, "❤ %d/%d", currentHp, maxHp);
+        int hpWidth = client.font.width(hpText);
+        graphics.text(client.font, Component.literal(hpText), x + width - hpWidth - 8, y + 3, 0xFFFF5555, false);
+
+        // Progress bar
+        int barX = x + 8;
+        int barY = y + 14;
+        int barWidth = width - 16;
+        int barHeight = 4;
+        float progress = Math.max(0.0F, Math.min(1.0F, trappedStruggleProgress / 100.0F));
+        int filled = (int) (progress * barWidth);
+
+        int barColor = progress >= 0.70F ? 0xFF55FF55 : progress >= 0.35F ? 0xFFFFAA00 : 0xFFFF4444;
+        graphics.fill(barX, barY, barX + barWidth, barY + barHeight, 0xFF333333);
+        if (filled > 0) {
+            graphics.fill(barX, barY, barX + filled, barY + barHeight, barColor);
+        }
+
+        // Subtext hint positioned above the container to avoid overlapping vanilla hotbar & hearts
+        String hint = "[SPACE] Tap Jump to Struggle!";
+        int hintWidth = client.font.width(hint);
+        graphics.text(client.font, Component.literal(hint), x + (width - hintWidth) / 2, y - 11, 0xFFEEEEEE, true);
+    }
+
+    private void renderBossQteHud(GuiGraphicsExtractor graphics, net.minecraft.client.DeltaTracker tickCounter) {
+        Minecraft client = Minecraft.getInstance();
+        if (client.player == null || !client.player.isAlive() || !bossQteActive || bossQteRemainingTicks <= 0) {
+            return;
+        }
+
+        int width = 180;
+        int height = 28;
+        int x = (client.getWindow().getGuiScaledWidth() - width) / 2;
+        int y = 45;
+
+        boolean flash = (client.player.tickCount / 4) % 2 == 0;
+        int bgColor = flash ? 0xDD661111 : 0xDD331111;
+        graphics.fill(x, y, x + width, y + height, bgColor);
+        graphics.fill(x, y, x + width, y + 2, 0xFFFF5555);
+        graphics.fill(x, y + height - 2, x + width, y + height, 0xFFFF5555);
+
+        String alertText = "! BRACE ! Press [V]";
+        int textWidth = client.font.width(alertText);
+        graphics.text(client.font, Component.literal(alertText), x + (width - textWidth) / 2, y + 4, 0xFFFFAA00, true);
+
+        int barX = x + 8;
+        int barY = y + 17;
+        int barWidth = width - 16;
+        int barHeight = 4;
+        float progress = bossQteDurationTicks > 0 ? (float) bossQteRemainingTicks / bossQteDurationTicks : 0.0F;
+        int filled = (int) (progress * barWidth);
+
+        graphics.fill(barX, barY, barX + barWidth, barY + barHeight, 0xFF222222);
+        if (filled > 0) {
+            graphics.fill(barX, barY, barX + filled, barY + barHeight, 0xFFFF3333);
+        }
     }
 }

@@ -113,6 +113,53 @@ public final class SlimeFormPayloads {
     public static final StreamCodec<ByteBuf, OpenCoreScreenPayload> OPEN_CORE_SCREEN_CODEC =
             StreamCodec.unit(new OpenCoreScreenPayload());
 
+    public static final CustomPacketPayload.Type<AbsorbSyncPayload> ABSORB_SYNC_TYPE =
+            new CustomPacketPayload.Type<>(Identifier.fromNamespaceAndPath(SlimeFormMod.MOD_ID, "absorb_sync"));
+    public static final StreamCodec<ByteBuf, AbsorbSyncPayload> ABSORB_SYNC_CODEC =
+            StreamCodec.composite(
+                    ByteBufCodecs.VAR_INT, AbsorbSyncPayload::holderEntityId,
+                    ByteBufCodecs.VAR_INT, AbsorbSyncPayload::ownerEntityId,
+                    ByteBufCodecs.collection(ArrayList::new, ByteBufCodecs.VAR_INT), AbsorbSyncPayload::trappedEntityIds,
+                    ByteBufCodecs.collection(ArrayList::new, ByteBufCodecs.VAR_INT), AbsorbSyncPayload::digestingEntityIds,
+                    AbsorbSyncPayload::new);
+
+    public static final CustomPacketPayload.Type<AbsorbActionPayload> ABSORB_ACTION_TYPE =
+            new CustomPacketPayload.Type<>(Identifier.fromNamespaceAndPath(SlimeFormMod.MOD_ID, "absorb_action"));
+    public static final StreamCodec<ByteBuf, AbsorbActionPayload> ABSORB_ACTION_CODEC =
+            StreamCodec.composite(
+                    ByteBufCodecs.VAR_INT, AbsorbActionPayload::action,
+                    ByteBufCodecs.VAR_INT, AbsorbActionPayload::targetEntityId,
+                    AbsorbActionPayload::new);
+
+    public static final CustomPacketPayload.Type<StruggleSyncPayload> STRUGGLE_SYNC_TYPE =
+            new CustomPacketPayload.Type<>(Identifier.fromNamespaceAndPath(SlimeFormMod.MOD_ID, "struggle_sync"));
+    public static final StreamCodec<ByteBuf, StruggleSyncPayload> STRUGGLE_SYNC_CODEC =
+            StreamCodec.composite(
+                    ByteBufCodecs.FLOAT, StruggleSyncPayload::progress,
+                    StruggleSyncPayload::new);
+
+    public static final CustomPacketPayload.Type<StruggleJumpPayload> STRUGGLE_JUMP_TYPE =
+            new CustomPacketPayload.Type<>(Identifier.fromNamespaceAndPath(SlimeFormMod.MOD_ID, "struggle_jump"));
+    public static final StreamCodec<ByteBuf, StruggleJumpPayload> STRUGGLE_JUMP_CODEC =
+            StreamCodec.unit(new StruggleJumpPayload());
+
+    public static final CustomPacketPayload.Type<BossQteSyncPayload> BOSS_QTE_SYNC_TYPE =
+            new CustomPacketPayload.Type<>(Identifier.fromNamespaceAndPath(SlimeFormMod.MOD_ID, "boss_qte_sync"));
+    public static final StreamCodec<ByteBuf, BossQteSyncPayload> BOSS_QTE_SYNC_CODEC =
+            StreamCodec.composite(
+                    ByteBufCodecs.VAR_INT, BossQteSyncPayload::bossEntityId,
+                    ByteBufCodecs.STRING_UTF8, BossQteSyncPayload::hazardName,
+                    ByteBufCodecs.VAR_INT, BossQteSyncPayload::qteDurationTicks,
+                    ByteBufCodecs.BOOL, BossQteSyncPayload::active,
+                    BossQteSyncPayload::new);
+
+    public static final CustomPacketPayload.Type<MutationSyncPayload> MUTATION_SYNC_TYPE =
+            new CustomPacketPayload.Type<>(Identifier.fromNamespaceAndPath(SlimeFormMod.MOD_ID, "mutation_sync"));
+    public static final StreamCodec<ByteBuf, MutationSyncPayload> MUTATION_SYNC_CODEC =
+            StreamCodec.composite(
+                    ByteBufCodecs.collection(ArrayList::new, ByteBufCodecs.STRING_UTF8), MutationSyncPayload::mutations,
+                    MutationSyncPayload::new);
+
     private SlimeFormPayloads() {
     }
 
@@ -221,6 +268,55 @@ public final class SlimeFormPayloads {
         @Override
         public Type<? extends CustomPacketPayload> type() {
             return OPEN_CORE_SCREEN_TYPE;
+        }
+    }
+
+    public record AbsorbSyncPayload(
+            int holderEntityId, int ownerEntityId, List<Integer> trappedEntityIds, List<Integer> digestingEntityIds)
+            implements CustomPacketPayload {
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return ABSORB_SYNC_TYPE;
+        }
+    }
+
+    public record AbsorbActionPayload(int action, int targetEntityId) implements CustomPacketPayload {
+        public static final int ACTION_EJECT = 0;
+        public static final int ACTION_DISSOLVE = 1;
+        public static final int ACTION_BRACE = 2;
+
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return ABSORB_ACTION_TYPE;
+        }
+    }
+
+    public record StruggleSyncPayload(float progress) implements CustomPacketPayload {
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return STRUGGLE_SYNC_TYPE;
+        }
+    }
+
+    public record StruggleJumpPayload() implements CustomPacketPayload {
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return STRUGGLE_JUMP_TYPE;
+        }
+    }
+
+    public record BossQteSyncPayload(int bossEntityId, String hazardName, int qteDurationTicks, boolean active)
+            implements CustomPacketPayload {
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return BOSS_QTE_SYNC_TYPE;
+        }
+    }
+
+    public record MutationSyncPayload(List<String> mutations) implements CustomPacketPayload {
+        @Override
+        public Type<? extends CustomPacketPayload> type() {
+            return MUTATION_SYNC_TYPE;
         }
     }
 }

@@ -34,6 +34,7 @@ public abstract class SlimeMorphAvatarRendererMixin {
             boolean morphed = SlimeFormClient.isClientMorphVisible(player);
             morphState.slimeform$setMorphed(morphed);
             morphState.slimeform$setSize(SlimeFormClient.getClientMorphSize(player));
+            morphState.slimeform$setPlayerEntityId(player.getId());
 
             SlimeAppearanceSettings appearance = SlimeFormClient.getPlayerAppearanceSettings(player);
             ((SlimeAppearanceRenderStateAccess) state).slimeform$setAppearance(

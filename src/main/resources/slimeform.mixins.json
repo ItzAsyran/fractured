@@ -33,7 +33,10 @@
 		"SlimeItemDisplayMixin",
 		"SlimeMountMixin",
 		"SlimePassengerPositionMixin",
-		"SlimeDormantConnectionMixin"
+		"SlimeDormantConnectionMixin",
+		"SlimeCreeperAbsorbMixin",
+		"SlimeEndermanAbsorbMixin",
+		"SlimeEntityVibrationMixin"
 	],
 	"server": [],
 	"client": [
@@ -60,7 +63,13 @@
 		"SlimeCosmeticaModelMixin",
 		"SlimeAppearanceHandContextMixin",
 		"SlimeAppearanceHandRendererMixin",
-		"EntityRenderDispatcherAccessor"
+		"EntityRenderDispatcherAccessor",
+		"SlimeMorphRendererMixin",
+		"SlimeAbsorbSlimeRenderStateMixin",
+		"SlimeAbsorbCubeMobRendererMixin",
+		"SlimeAbsorbRendererMixin",
+		"SlimeAbsorbOuterLayerMixin",
+		"SlimeAbsorbEntityDispatcherMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

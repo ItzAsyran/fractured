@@ -5,7 +5,15 @@ import com.mojang.brigadier.arguments.BoolArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
+import net.fabricmc.fabric.api.entity.event.v1.ServerEntityLevelChangeEvents;
+import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
+import net.fabricmc.fabric.api.event.player.AttackBlockCallback;
+import net.fabricmc.fabric.api.event.player.AttackEntityCallback;
+import net.fabricmc.fabric.api.event.player.UseBlockCallback;
+import net.fabricmc.fabric.api.event.player.UseEntityCallback;
+import net.fabricmc.fabric.api.event.player.UseItemCallback;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
@@ -22,6 +30,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
+import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
@@ -90,9 +99,31 @@ public class SlimeFormMod implements ModInitializer {
         PayloadTypeRegistry.serverboundPlay().register(
                 SlimeFormPayloads.CORE_ACTION_TYPE,
                 SlimeFormPayloads.CORE_ACTION_CODEC);
+        PayloadTypeRegistry.serverboundPlay().register(
+                SlimeFormPayloads.ABSORB_ACTION_TYPE,
+                SlimeFormPayloads.ABSORB_ACTION_CODEC);
         PayloadTypeRegistry.clientboundPlay().register(
                 SlimeFormPayloads.OPEN_CORE_SCREEN_TYPE,
                 SlimeFormPayloads.OPEN_CORE_SCREEN_CODEC);
+        PayloadTypeRegistry.clientboundPlay().register(
+                SlimeFormPayloads.ABSORB_SYNC_TYPE,
+                SlimeFormPayloads.ABSORB_SYNC_CODEC);
+        PayloadTypeRegistry.clientboundPlay().register(
+                SlimeFormPayloads.STRUGGLE_SYNC_TYPE,
+                SlimeFormPayloads.STRUGGLE_SYNC_CODEC);
+        PayloadTypeRegistry.serverboundPlay().register(
+                SlimeFormPayloads.STRUGGLE_JUMP_TYPE,
+                SlimeFormPayloads.STRUGGLE_JUMP_CODEC);
+        PayloadTypeRegistry.clientboundPlay().register(
+                SlimeFormPayloads.BOSS_QTE_SYNC_TYPE,
+                SlimeFormPayloads.BOSS_QTE_SYNC_CODEC);
+        PayloadTypeRegistry.clientboundPlay().register(
+                SlimeFormPayloads.MUTATION_SYNC_TYPE,
+                SlimeFormPayloads.MUTATION_SYNC_CODEC);
+        ServerPlayNetworking.registerGlobalReceiver(
+                SlimeFormPayloads.STRUGGLE_JUMP_TYPE,
+                (payload, context) -> context.server().execute(
+                        () -> SlimeAbsorbManager.handleStruggleJump(context.player())));
         ServerPlayNetworking.registerGlobalReceiver(
                 SlimeFormPayloads.WAKE_DORMANT_TYPE,
                 (payload, context) -> wakeDormant(context.player()));
@@ -116,17 +147,24 @@ public class SlimeFormMod implements ModInitializer {
                 SlimeFormPayloads.CORE_ACTION_TYPE,
                 (payload, context) -> context.server().execute(
                         () -> handleCoreAction(context.player(), payload)));
+        ServerPlayNetworking.registerGlobalReceiver(
+                SlimeFormPayloads.ABSORB_ACTION_TYPE,
+                (payload, context) -> context.server().execute(
+                        () -> SlimeAbsorbManager.handleAction(context.player(), payload)));
         SlimeAppearanceServerState.registerTrackingEvents();
+        SlimeAbsorbManager.registerTrackingEvents();
         LOGGER.info("Sliming.");
 
         ServerTickEvents.END_SERVER_TICK.register(server -> {
             for (ServerPlayer player : server.getPlayerList().getPlayers()) {
                 SlimeRiderScale.tick(player);
+                SlimeFormState.tickPlayerMutations(player);
             }
             SlimeRecoveryManager.tickRecoveries(server);
             tickDormantPlayers(server);
             tickSlimeChunksState(server);
             SlimeMorphManager.tick(server);
+            SlimeAbsorbManager.tick(server);
             SlimeFormVisuals.processPendingRemovals(server);
         });
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
@@ -137,7 +175,9 @@ public class SlimeFormMod implements ModInitializer {
                         .withStyle(ChatFormatting.GREEN));
             }
             SlimeFormState.applyHealth(player, false);
+            SlimeFormState.syncMutations(player);
             SlimeRecoveryManager.notifyAbandonedRecovery(player);
+            SlimeAbsorbManager.onPlayerJoin(player);
             ServerPlayNetworking.send(player,
                     new SlimeFormPayloads.PhaseStatePayload(SlimeFormConfig.get().doPhaseEnabled));
             ServerPlayNetworking.send(player, currentSlimeChunksState(server));
@@ -153,6 +193,7 @@ public class SlimeFormMod implements ModInitializer {
         });
         ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> {
             ServerPlayer player = handler.getPlayer();
+            SlimeAbsorbManager.handlePlayerDisconnect(server, player);
             // Must run first: ends a running recovery so the inventory is dropped, not lost.
             SlimeRecoveryManager.handlePlayerDisconnect(server, player);
             SlimeAppearanceServerState.remove(player);
@@ -165,6 +206,43 @@ public class SlimeFormMod implements ModInitializer {
             COMBAT_TICKS.remove(player.getUUID());
             ACTIVITY_POSITIONS.remove(player.getUUID());
             DORMANT_PREVIOUS_INVISIBILITY.remove(player.getUUID());
+        });
+
+        ServerPlayerEvents.AFTER_RESPAWN.register((oldPlayer, newPlayer, alive) -> {
+            SlimeAbsorbManager.clearDissolveDeath(newPlayer);
+            SlimeAbsorbManager.clearDissolveDeath(oldPlayer);
+            SlimeFormState.syncMutations(newPlayer);
+        });
+
+        AttackBlockCallback.EVENT.register((player, world, hand, pos, direction) ->
+                SlimeAbsorbManager.isAbsorbed(player) ? InteractionResult.FAIL : InteractionResult.PASS);
+        UseBlockCallback.EVENT.register((player, world, hand, hitResult) ->
+                SlimeAbsorbManager.isAbsorbed(player) ? InteractionResult.FAIL : InteractionResult.PASS);
+        AttackEntityCallback.EVENT.register((player, world, hand, entity, hitResult) -> {
+            if (SlimeAbsorbManager.isAbsorbed(player)) {
+                return InteractionResult.FAIL;
+            }
+            if (!world.isClientSide() && entity instanceof LivingEntity targetLiving) {
+                if (SlimeFormState.hasMutation(player, SlimeFormState.MUTATION_WITHER)) {
+                    targetLiving.addEffect(new net.minecraft.world.effect.MobEffectInstance(
+                            net.minecraft.world.effect.MobEffects.WITHER, 60, 0));
+                }
+            }
+            return InteractionResult.PASS;
+        });
+        UseItemCallback.EVENT.register((player, world, hand) ->
+                SlimeAbsorbManager.isAbsorbed(player) ? InteractionResult.FAIL : InteractionResult.PASS);
+        UseEntityCallback.EVENT.register((player, world, hand, entity, hitResult) ->
+                SlimeAbsorbManager.isAbsorbed(player) ? InteractionResult.FAIL : InteractionResult.PASS);
+
+        ServerEntityLevelChangeEvents.AFTER_PLAYER_CHANGE_LEVEL.register((player, origin, destination) -> {
+            if (SlimeMorphManager.isMorphed(player)) {
+                SlimeMorphManager.stop(player);
+            }
+        });
+
+        ServerLifecycleEvents.SERVER_STOPPING.register(server -> {
+            SlimeAbsorbManager.onServerStopping(server);
         });
 
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) ->

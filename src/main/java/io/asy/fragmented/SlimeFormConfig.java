@@ -9,6 +9,8 @@ import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 
 public class SlimeFormConfig {
     public static final int MIN_MAX_SLIME_SIZE = 1;
@@ -35,6 +37,32 @@ public class SlimeFormConfig {
     public static final int MAX_PLAYER_TRANSPARENCY = 100;
     public static final int MIN_RECOVERY_REFORM_SAFETY_RADIUS = 2;
     public static final int MAX_RECOVERY_REFORM_SAFETY_RADIUS = 32;
+    public static final double MIN_ABSORB_CAPACITY_FACTOR = 0.01D;
+    public static final double MAX_ABSORB_CAPACITY_FACTOR = 2.0D;
+    public static final int MIN_ABSORB_COOLDOWN_TICKS = 0;
+    public static final int MAX_ABSORB_COOLDOWN_TICKS = 6000;
+    public static final double MIN_ABSORB_DIGEST_BASE_DPS = 0.1D;
+    public static final double MAX_ABSORB_DIGEST_BASE_DPS = 50.0D;
+    public static final double MIN_ABSORB_DIGEST_DPS_PER_SIZE = 0.0D;
+    public static final double MAX_ABSORB_DIGEST_DPS_PER_SIZE = 10.0D;
+    public static final int MIN_ABSORB_DIGEST_INTERVAL_TICKS = 1;
+    public static final int MAX_ABSORB_DIGEST_INTERVAL_TICKS = 200;
+    public static final double MIN_ABSORB_DISSOLVE_GAIN_PER_UNIT = 0.0D;
+    public static final double MAX_ABSORB_DISSOLVE_GAIN_PER_UNIT = 50.0D;
+    public static final double MIN_ABSORB_STRUGGLE_JUMP_GAIN = 0.5D;
+    public static final double MAX_ABSORB_STRUGGLE_JUMP_GAIN = 50.0D;
+    public static final double MIN_ABSORB_STRUGGLE_HIT_GAIN = 0.5D;
+    public static final double MAX_ABSORB_STRUGGLE_HIT_GAIN = 50.0D;
+    public static final double MIN_ABSORB_STRUGGLE_DECAY = 0.0D;
+    public static final double MAX_ABSORB_STRUGGLE_DECAY = 50.0D;
+    public static final double MIN_ABSORB_FULLNESS_SLOWDOWN = 0.0D;
+    public static final double MAX_ABSORB_FULLNESS_SLOWDOWN = 0.9D;
+    public static final int MIN_ABSORB_INNER_OPACITY_PERCENT = 0;
+    public static final int MAX_ABSORB_INNER_OPACITY_PERCENT = 100;
+    public static final double MIN_ABSORB_FIT_TARGET_SCALE = 0.05D;
+    public static final double MAX_ABSORB_FIT_TARGET_SCALE = 1.0D;
+    public static final int MIN_ABSORB_WILD_SLIME_RANGE = 1;
+    public static final int MAX_ABSORB_WILD_SLIME_RANGE = 128;
 
     public int maxSlimeSize = 5;
 
@@ -124,6 +152,31 @@ public class SlimeFormConfig {
     public int afkInactivitySeconds = 300;
 
     public boolean developerMode = false;
+
+    public boolean absorbEnabled = true;
+    public boolean absorbPlayersEnabled = true;
+    public boolean absorbBossesEnabled = true;
+    public double absorbCapacityFactor = 0.2D;
+    public int absorbReabsorbCooldownTicks = 60;
+    public float absorbDigestBaseDps = 1.0F;
+    public float absorbDigestDpsPerSizeAbove2 = 0.25F;
+    public int absorbDigestIntervalTicks = 20;
+    public float absorbDissolveHealthPerUnit = 3.0F;
+    public float absorbDissolveHungerPerUnit = 3.0F;
+    public float absorbStruggleJumpGain = 6.0F;
+    public float absorbStruggleHitGain = 3.0F;
+    public float absorbStruggleDecayPerSecond = 4.0F;
+    public double absorbFullnessMaxSlowdown = 0.25D;
+    public int absorbInnerOpacityPercent = 25;
+    public double absorbFitTargetScale = 0.72D;
+    public List<String> absorbBlockedEntities = new ArrayList<>(List.of(
+            "minecraft:ender_dragon",
+            "minecraft:slime",
+            "minecraft:magma_cube"
+    ));
+    public List<String> absorbHostileOverrides = new ArrayList<>();
+    public List<String> absorbPassiveOverrides = new ArrayList<>();
+    public int absorbWildSlimeRange = 24;
 
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final Path CONFIG_PATH = FabricLoader.getInstance().getConfigDir().resolve(SlimeFormMod.MOD_ID + ".json");
@@ -245,6 +298,62 @@ public class SlimeFormConfig {
 
     public double effectiveItemDisplayBobAmplitude() {
         return clamp(itemDisplayBobAmplitude, MIN_ITEM_DISPLAY_BOB, MAX_ITEM_DISPLAY_BOB);
+    }
+
+    public double effectiveAbsorbCapacityFactor() {
+        return clamp(absorbCapacityFactor, MIN_ABSORB_CAPACITY_FACTOR, MAX_ABSORB_CAPACITY_FACTOR);
+    }
+
+    public int effectiveAbsorbReabsorbCooldownTicks() {
+        return clamp(absorbReabsorbCooldownTicks, MIN_ABSORB_COOLDOWN_TICKS, MAX_ABSORB_COOLDOWN_TICKS);
+    }
+
+    public float effectiveAbsorbDigestBaseDps() {
+        return (float) clamp(absorbDigestBaseDps, MIN_ABSORB_DIGEST_BASE_DPS, MAX_ABSORB_DIGEST_BASE_DPS);
+    }
+
+    public float effectiveAbsorbDigestDpsPerSizeAbove2() {
+        return (float) clamp(absorbDigestDpsPerSizeAbove2, MIN_ABSORB_DIGEST_DPS_PER_SIZE, MAX_ABSORB_DIGEST_DPS_PER_SIZE);
+    }
+
+    public int effectiveAbsorbDigestIntervalTicks() {
+        return clamp(absorbDigestIntervalTicks, MIN_ABSORB_DIGEST_INTERVAL_TICKS, MAX_ABSORB_DIGEST_INTERVAL_TICKS);
+    }
+
+    public float effectiveAbsorbDissolveHealthPerUnit() {
+        return (float) clamp(absorbDissolveHealthPerUnit, MIN_ABSORB_DISSOLVE_GAIN_PER_UNIT, MAX_ABSORB_DISSOLVE_GAIN_PER_UNIT);
+    }
+
+    public float effectiveAbsorbDissolveHungerPerUnit() {
+        return (float) clamp(absorbDissolveHungerPerUnit, MIN_ABSORB_DISSOLVE_GAIN_PER_UNIT, MAX_ABSORB_DISSOLVE_GAIN_PER_UNIT);
+    }
+
+    public float effectiveAbsorbStruggleJumpGain() {
+        return (float) clamp(absorbStruggleJumpGain, MIN_ABSORB_STRUGGLE_JUMP_GAIN, MAX_ABSORB_STRUGGLE_JUMP_GAIN);
+    }
+
+    public float effectiveAbsorbStruggleHitGain() {
+        return (float) clamp(absorbStruggleHitGain, MIN_ABSORB_STRUGGLE_HIT_GAIN, MAX_ABSORB_STRUGGLE_HIT_GAIN);
+    }
+
+    public float effectiveAbsorbStruggleDecayPerSecond() {
+        return (float) clamp(absorbStruggleDecayPerSecond, MIN_ABSORB_STRUGGLE_DECAY, MAX_ABSORB_STRUGGLE_DECAY);
+    }
+
+    public double effectiveAbsorbFullnessMaxSlowdown() {
+        return clamp(absorbFullnessMaxSlowdown, MIN_ABSORB_FULLNESS_SLOWDOWN, MAX_ABSORB_FULLNESS_SLOWDOWN);
+    }
+
+    public int effectiveAbsorbInnerOpacityPercent() {
+        return clamp(absorbInnerOpacityPercent, MIN_ABSORB_INNER_OPACITY_PERCENT, MAX_ABSORB_INNER_OPACITY_PERCENT);
+    }
+
+    public double effectiveAbsorbFitTargetScale() {
+        return clamp(absorbFitTargetScale, MIN_ABSORB_FIT_TARGET_SCALE, MAX_ABSORB_FIT_TARGET_SCALE);
+    }
+
+    public int effectiveAbsorbWildSlimeRange() {
+        return clamp(absorbWildSlimeRange, MIN_ABSORB_WILD_SLIME_RANGE, MAX_ABSORB_WILD_SLIME_RANGE);
     }
 
     private static int clamp(int value, int min, int max) {

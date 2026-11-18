@@ -215,5 +215,67 @@ public class GameplayMechanicsTab extends SlimeCoreTab {
                 null
         );
         cards.add(worldCard);
+
+        // --- Card 5: Absorb Mechanic ---
+        BedrockCard absorbCard = new BedrockCard(x, y, width, Component.literal("Absorb Mechanic"));
+        absorbCard.addSwitch(
+                Component.literal("Absorb Mechanic"),
+                Component.literal("Allows morphed slimes and large fragments to absorb touching entities into their gelatinous body."),
+                config.absorbEnabled,
+                val -> {
+                    config.absorbEnabled = val;
+                    SlimeFormConfig.save();
+                },
+                null
+        );
+
+        absorbCard.addSwitch(
+                Component.literal("Absorb Players"),
+                Component.literal("Allows absorbing other players on contact."),
+                config.absorbPlayersEnabled,
+                val -> {
+                    config.absorbPlayersEnabled = val;
+                    SlimeFormConfig.save();
+                },
+                null
+        );
+
+        absorbCard.addSwitch(
+                Component.literal("Absorb Bosses"),
+                Component.literal("Allows absorbing Withers, Elder Guardians, and Wardens (requires high size & capacity)."),
+                config.absorbBossesEnabled,
+                val -> {
+                    config.absorbBossesEnabled = val;
+                    SlimeFormConfig.save();
+                },
+                null
+        );
+
+        absorbCard.addSlider(
+                Component.literal("Absorb Capacity Factor"),
+                config.absorbCapacityFactor,
+                SlimeFormConfig.MIN_ABSORB_CAPACITY_FACTOR,
+                SlimeFormConfig.MAX_ABSORB_CAPACITY_FACTOR,
+                false,
+                val -> Component.literal(String.format(java.util.Locale.ROOT, "Capacity: %.2fx", val)),
+                val -> {
+                    config.absorbCapacityFactor = val;
+                    SlimeFormConfig.save();
+                },
+                null
+        );
+
+        absorbCard.addSlider(
+                Component.literal("Re-absorb Cooldown"),
+                config.absorbReabsorbCooldownTicks,
+                0, 100, true,
+                val -> Component.literal(String.format(java.util.Locale.ROOT, "Cooldown: %d ticks (%.1fs)", val.intValue(), val.intValue() / 20.0f)),
+                val -> {
+                    config.absorbReabsorbCooldownTicks = val.intValue();
+                    SlimeFormConfig.save();
+                },
+                null
+        );
+        cards.add(absorbCard);
     }
 }

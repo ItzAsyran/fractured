@@ -9,4 +9,8 @@ public interface SlimeMorphRenderStateAccess {
     int slimeform$getSize();
 
     void slimeform$setSize(int size);
+
+    int slimeform$getPlayerEntityId();
+
+    void slimeform$setPlayerEntityId(int id);
 }

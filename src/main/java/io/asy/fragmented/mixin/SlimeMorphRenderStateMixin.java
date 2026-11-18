@@ -14,6 +14,8 @@ public abstract class SlimeMorphRenderStateMixin
     @Unique
     private int slimeform$size = 1;
     @Unique
+    private int slimeform$playerEntityId;
+    @Unique
     private boolean slimeform$appearanceActive;
     @Unique
     private int slimeform$transparencyPercent;
@@ -40,6 +42,16 @@ public abstract class SlimeMorphRenderStateMixin
     @Override
     public void slimeform$setSize(int size) {
         slimeform$size = Math.max(1, size);
+    }
+
+    @Override
+    public int slimeform$getPlayerEntityId() {
+        return slimeform$playerEntityId;
+    }
+
+    @Override
+    public void slimeform$setPlayerEntityId(int id) {
+        slimeform$playerEntityId = id;
     }
 
     @Override

@@ -1675,6 +1675,7 @@ public final class SlimeRecoveryManager {
             for (UUID lineageEntityId : recovery.lineageEntityIds()) {
                 Entity entity = level.getEntity(lineageEntityId);
                 if (entity instanceof Slime slime && !slime.isRemoved()) {
+                    SlimeAbsorbManager.ejectAll(slime);
                     slime.discard();
                     removed++;
                 }
@@ -1692,6 +1693,7 @@ public final class SlimeRecoveryManager {
         List<Slime> lineageSlimes = getLineageSlimes(server, lineageId);
         for (Slime slime : lineageSlimes) {
             if (!slime.isRemoved()) {
+                SlimeAbsorbManager.ejectAll(slime);
                 slime.discard();
                 removed++;
             }

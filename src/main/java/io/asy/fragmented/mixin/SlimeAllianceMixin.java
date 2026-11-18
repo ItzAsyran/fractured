@@ -1,5 +1,6 @@
 package io.asy.fragmented.mixin;
 
+import io.asy.fragmented.SlimeAbsorbManager;
 import io.asy.fragmented.SlimeFormMod;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.monster.cubemob.MagmaCube;
@@ -23,6 +24,21 @@ public abstract class SlimeAllianceMixin {
                         && other instanceof Slime
                         && !(other instanceof MagmaCube))) {
             cir.setReturnValue(true);
+        }
+    }
+
+    @Inject(method = "canCollideWith", at = @At("HEAD"), cancellable = true)
+    private void slimeform$noAbsorbedCollision(Entity other, CallbackInfoReturnable<Boolean> cir) {
+        if (((Entity) (Object) this).entityTags().contains(SlimeAbsorbManager.ABSORBED_TAG)
+                || (other != null && other.entityTags().contains(SlimeAbsorbManager.ABSORBED_TAG))) {
+            cir.setReturnValue(false);
+        }
+    }
+
+    @Inject(method = "canBeCollidedWith", at = @At("HEAD"), cancellable = true)
+    private void slimeform$noAbsorbedCanBeCollidedWith(CallbackInfoReturnable<Boolean> cir) {
+        if (((Entity) (Object) this).entityTags().contains(SlimeAbsorbManager.ABSORBED_TAG)) {
+            cir.setReturnValue(false);
         }
     }
 }

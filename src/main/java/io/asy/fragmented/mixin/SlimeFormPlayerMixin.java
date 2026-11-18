@@ -1,5 +1,6 @@
 package io.asy.fragmented.mixin;
 
+import io.asy.fragmented.SlimeAbsorbManager;
 import io.asy.fragmented.SlimeFormMod;
 import io.asy.fragmented.SlimeFormPhaseableBlocks;
 import io.asy.fragmented.SlimeFormPhaseDebug;
@@ -12,7 +13,9 @@ import net.minecraft.tags.DamageTypeTags;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.damagesource.DamageTypes;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.monster.cubemob.Slime;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.phys.Vec3;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.block.state.BlockState;
@@ -28,10 +31,70 @@ import org.spongepowered.asm.mixin.injection.invoke.arg.Args;
 
 @Mixin(LivingEntity.class)
 public abstract class SlimeFormPlayerMixin {
+    @Inject(method = "isPushable", at = @At("HEAD"), cancellable = true)
+    private void slimeform$noAbsorbedPush(CallbackInfoReturnable<Boolean> cir) {
+        LivingEntity living = (LivingEntity) (Object) this;
+        if (living.entityTags().contains(SlimeAbsorbManager.ABSORBED_TAG)) {
+            cir.setReturnValue(false);
+        }
+    }
+
+    @Inject(method = "pushEntities", at = @At("HEAD"), cancellable = true)
+    private void slimeform$noPushEntitiesWhenAbsorbed(CallbackInfo ci) {
+        LivingEntity living = (LivingEntity) (Object) this;
+        if (living.entityTags().contains(SlimeAbsorbManager.ABSORBED_TAG)) {
+            ci.cancel();
+        }
+    }
+
+    @Inject(method = "doPush", at = @At("HEAD"), cancellable = true)
+    private void slimeform$noDoPushWhenAbsorbed(net.minecraft.world.entity.Entity other, CallbackInfo ci) {
+        LivingEntity living = (LivingEntity) (Object) this;
+        if (living.entityTags().contains(SlimeAbsorbManager.ABSORBED_TAG)
+                || (other != null && other.entityTags().contains(SlimeAbsorbManager.ABSORBED_TAG))) {
+            ci.cancel();
+        }
+    }
+
+    @Inject(method = "push(Lnet/minecraft/world/entity/Entity;)V", at = @At("HEAD"), cancellable = true)
+    private void slimeform$noPushWhenAbsorbed(net.minecraft.world.entity.Entity other, CallbackInfo ci) {
+        LivingEntity living = (LivingEntity) (Object) this;
+        if (living.entityTags().contains(SlimeAbsorbManager.ABSORBED_TAG)
+                || (other != null && other.entityTags().contains(SlimeAbsorbManager.ABSORBED_TAG))) {
+            ci.cancel();
+        }
+    }
+
+    @Inject(method = "travel", at = @At("HEAD"), cancellable = true)
+    private void slimeform$noTravelWhenAbsorbed(Vec3 travelVector, CallbackInfo ci) {
+        LivingEntity living = (LivingEntity) (Object) this;
+        if (living.entityTags().contains(SlimeAbsorbManager.ABSORBED_TAG)) {
+            ci.cancel();
+        }
+    }
+
     @Inject(method = "hurtServer", at = @At("HEAD"), cancellable = true)
     private void slimeform$blockDormantDamage(
             ServerLevel level, DamageSource source, float amount,
             CallbackInfoReturnable<Boolean> cir) {
+        LivingEntity living = (LivingEntity) (Object) this;
+        if (source.is(DamageTypes.WITHER)) {
+            if (living instanceof Player player && SlimeFormState.hasMutation(player, SlimeFormState.MUTATION_WITHER)) {
+                cir.setReturnValue(false);
+                return;
+            } else if (living instanceof Slime slime && SlimeMorphManager.isMorphBody(slime)) {
+                ServerPlayer owner = SlimeMorphManager.ownerOf(slime);
+                if (owner != null && SlimeFormState.hasMutation(owner, SlimeFormState.MUTATION_WITHER)) {
+                    cir.setReturnValue(false);
+                    return;
+                }
+            }
+        }
+        if (living.entityTags().contains(SlimeAbsorbManager.ABSORBED_TAG)
+                && !SlimeAbsorbManager.isApplyingAbsorbDamage()) {
+            cir.setReturnValue(false);
+            return;
+        }
         if ((Object) this instanceof ServerPlayer player
                 && source.is(DamageTypes.IN_WALL)
                 && SlimeMorphManager.isMorphed(player)
@@ -44,6 +107,24 @@ public abstract class SlimeFormPlayerMixin {
         SlimeFormPhaseDebug.recordDamage((LivingEntity) (Object) this, source.type().toString(), false);
         if ((Object) this instanceof Player player && SlimeFormMod.isDormant(player)) {
             cir.setReturnValue(false);
+        }
+    }
+
+    @Inject(method = "hurtServer", at = @At("RETURN"))
+    private void slimeform$onLivingHurt(
+            ServerLevel level, DamageSource source, float amount,
+            CallbackInfoReturnable<Boolean> cir) {
+        if (!cir.getReturnValue()) {
+            return;
+        }
+        LivingEntity living = (LivingEntity) (Object) this;
+        if (living instanceof Slime slime) {
+            SlimeAbsorbManager.onHolderHurt(slime, source, amount);
+        } else if (living instanceof ServerPlayer player && SlimeMorphManager.isMorphed(player)) {
+            Slime body = SlimeMorphManager.getMorphBody(player);
+            if (body != null) {
+                SlimeAbsorbManager.onHolderHurt(body, source, amount);
+            }
         }
     }
 

@@ -1,5 +1,6 @@
 package io.asy.fragmented.mixin;
 
+import io.asy.fragmented.SlimeAbsorbManager;
 import io.asy.fragmented.SlimeFormEntities;
 import io.asy.fragmented.SlimeFormMod;
 import io.asy.fragmented.SlimeFormConfig;
@@ -31,6 +32,14 @@ public abstract class SlimePlayerLifecycleMixin {
     @Unique
     private boolean slimeform$deathHandled;
 
+    @Inject(method = "drop(Z)V", at = @At("HEAD"), cancellable = true)
+    private void slimeform$noDropWhenAbsorbed(boolean entireStack, CallbackInfo ci) {
+        ServerPlayer player = (ServerPlayer) (Object) this;
+        if (SlimeAbsorbManager.isAbsorbed(player)) {
+            ci.cancel();
+        }
+    }
+
     @Inject(method = "hurtServer", at = @At("TAIL"))
     private void slimeform$retaliateWhenHurt(
             ServerLevel level, DamageSource source, float amount,
@@ -52,7 +61,11 @@ public abstract class SlimePlayerLifecycleMixin {
     @Inject(method = "die", at = @At("HEAD"))
     private void slimeform$splitOnDeath(DamageSource source, CallbackInfo ci) {
         ServerPlayer player = (ServerPlayer) (Object) this;
+        SlimeAbsorbManager.onPlayerDeath(player);
         SlimeMorphManager.stop(player);
+        if (SlimeAbsorbManager.isDissolveDeath(player)) {
+            return;
+        }
         if (slimeform$deathHandled || !SlimeFormState.isActive(player)) {
             return;
         }

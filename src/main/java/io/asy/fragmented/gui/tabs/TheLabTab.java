@@ -249,5 +249,169 @@ public class TheLabTab extends SlimeCoreTab {
                 null
         );
         cards.add(debugCard);
+
+        // --- Card 4: Advanced Absorb Mechanics (Accordion gated by developerMode) ---
+        BedrockCard advancedAbsorbCard = new BedrockCard(x, y, width, Component.literal("Absorb Advanced Tuning (The Lab)"));
+        advancedAbsorbCard.setCollapsible(true, !config.developerMode);
+
+        advancedAbsorbCard.addSlider(
+                Component.literal("Base Digestion DPS"),
+                config.absorbDigestBaseDps,
+                SlimeFormConfig.MIN_ABSORB_DIGEST_BASE_DPS,
+                20.0D,
+                false,
+                val -> Component.literal(String.format(Locale.ROOT, "Base DPS (Size 2): %.2f", val)),
+                val -> {
+                    config.absorbDigestBaseDps = val.floatValue();
+                    SlimeFormConfig.save();
+                },
+                null
+        );
+
+        advancedAbsorbCard.addSlider(
+                Component.literal("Digestion DPS / Size > 2"),
+                config.absorbDigestDpsPerSizeAbove2,
+                SlimeFormConfig.MIN_ABSORB_DIGEST_DPS_PER_SIZE,
+                5.0D,
+                false,
+                val -> Component.literal(String.format(Locale.ROOT, "DPS / Size: +%.2f", val)),
+                val -> {
+                    config.absorbDigestDpsPerSizeAbove2 = val.floatValue();
+                    SlimeFormConfig.save();
+                },
+                null
+        );
+
+        advancedAbsorbCard.addSlider(
+                Component.literal("Digestion Pulse Interval"),
+                config.absorbDigestIntervalTicks,
+                1, 100, true,
+                val -> Component.literal(String.format(Locale.ROOT, "Pulse Interval: %d ticks (%.1fs)", val.intValue(), val.intValue() / 20.0f)),
+                val -> {
+                    config.absorbDigestIntervalTicks = val.intValue();
+                    SlimeFormConfig.save();
+                },
+                null
+        );
+
+        advancedAbsorbCard.addSlider(
+                Component.literal("Dissolve Health Gain / Unit"),
+                config.absorbDissolveHealthPerUnit,
+                0.0D, 20.0D, false,
+                val -> Component.literal(String.format(Locale.ROOT, "Health Gain / Unit: %.1f", val)),
+                val -> {
+                    config.absorbDissolveHealthPerUnit = val.floatValue();
+                    SlimeFormConfig.save();
+                },
+                null
+        );
+
+        advancedAbsorbCard.addSlider(
+                Component.literal("Dissolve Hunger Gain / Unit"),
+                config.absorbDissolveHungerPerUnit,
+                0.0D, 20.0D, false,
+                val -> Component.literal(String.format(Locale.ROOT, "Food Gain / Unit: %.1f", val)),
+                val -> {
+                    config.absorbDissolveHungerPerUnit = val.floatValue();
+                    SlimeFormConfig.save();
+                },
+                null
+        );
+
+
+        advancedAbsorbCard.addSlider(
+                Component.literal("Struggle Jump Gain"),
+                config.absorbStruggleJumpGain,
+                SlimeFormConfig.MIN_ABSORB_STRUGGLE_JUMP_GAIN,
+                20.0D,
+                false,
+                val -> Component.literal(String.format(Locale.ROOT, "Jump Escape: +%.1f%%", val)),
+                val -> {
+                    config.absorbStruggleJumpGain = val.floatValue();
+                    SlimeFormConfig.save();
+                },
+                null
+        );
+
+        advancedAbsorbCard.addSlider(
+                Component.literal("Struggle Hit Gain"),
+                config.absorbStruggleHitGain,
+                SlimeFormConfig.MIN_ABSORB_STRUGGLE_HIT_GAIN,
+                15.0D,
+                false,
+                val -> Component.literal(String.format(Locale.ROOT, "Hit Escape: +%.1f%%", val)),
+                val -> {
+                    config.absorbStruggleHitGain = val.floatValue();
+                    SlimeFormConfig.save();
+                },
+                null
+        );
+
+        advancedAbsorbCard.addSlider(
+                Component.literal("Struggle Decay / Second"),
+                config.absorbStruggleDecayPerSecond,
+                SlimeFormConfig.MIN_ABSORB_STRUGGLE_DECAY,
+                15.0D,
+                false,
+                val -> Component.literal(String.format(Locale.ROOT, "Escape Decay: -%.1f%% / s", val)),
+                val -> {
+                    config.absorbStruggleDecayPerSecond = val.floatValue();
+                    SlimeFormConfig.save();
+                },
+                null
+        );
+
+        advancedAbsorbCard.addSlider(
+                Component.literal("Fullness Max Slowdown"),
+                config.absorbFullnessMaxSlowdown,
+                SlimeFormConfig.MIN_ABSORB_FULLNESS_SLOWDOWN,
+                SlimeFormConfig.MAX_ABSORB_FULLNESS_SLOWDOWN,
+                false,
+                val -> Component.literal(String.format(Locale.ROOT, "Fullness Slowdown: -%.0f%%", val * 100.0D)),
+                val -> {
+                    config.absorbFullnessMaxSlowdown = val.doubleValue();
+                    SlimeFormConfig.save();
+                },
+                null
+        );
+
+        advancedAbsorbCard.addSlider(
+                Component.literal("Absorb Core Opacity"),
+                config.absorbInnerOpacityPercent,
+                SlimeFormConfig.MIN_ABSORB_INNER_OPACITY_PERCENT,
+                SlimeFormConfig.MAX_ABSORB_INNER_OPACITY_PERCENT,
+                true,
+                val -> Component.literal(String.format(Locale.ROOT, "Core Opacity: %d%%", val.intValue())),
+                val -> {
+                    config.absorbInnerOpacityPercent = val.intValue();
+                    SlimeFormConfig.save();
+                },
+                null
+        );
+
+        advancedAbsorbCard.addSlider(
+                Component.literal("Absorb Fit Target Scale"),
+                config.absorbFitTargetScale,
+                0.10D, 1.0D, false,
+                val -> Component.literal(String.format(Locale.ROOT, "Fit Target Scale: %.2fx", val)),
+                val -> {
+                    config.absorbFitTargetScale = val;
+                    SlimeFormConfig.save();
+                },
+                null
+        );
+
+        advancedAbsorbCard.addSlider(
+                Component.literal("Wild Slime Absorb Range"),
+                config.absorbWildSlimeRange,
+                1, 64, true,
+                val -> Component.literal(String.format(Locale.ROOT, "Wild Slime Range: %d blocks", val.intValue())),
+                val -> {
+                    config.absorbWildSlimeRange = val.intValue();
+                    SlimeFormConfig.save();
+                },
+                null
+        );
+        cards.add(advancedAbsorbCard);
     }
 }

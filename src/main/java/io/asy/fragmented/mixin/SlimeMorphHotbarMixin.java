@@ -1,5 +1,6 @@
 package io.asy.fragmented.mixin;
 
+import io.asy.fragmented.SlimeAbsorbClientState;
 import io.asy.fragmented.SlimeFormClient;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Hud;
@@ -13,11 +14,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 public abstract class SlimeMorphHotbarMixin {
     @Inject(method = "getCameraPlayer", at = @At("RETURN"), cancellable = true)
     private void slimeform$useLocalPlayerForHotbar(CallbackInfoReturnable<Player> cir) {
-        if (SlimeFormClient.isLocalMorphActive()) {
-            Player player = Minecraft.getInstance().player;
-            if (player != null) {
-                cir.setReturnValue(player);
-            }
+        Player player = Minecraft.getInstance().player;
+        if (player != null && (SlimeFormClient.isLocalMorphActive() || SlimeAbsorbClientState.isTrapped(player.getId()))) {
+            cir.setReturnValue(player);
         }
     }
 }

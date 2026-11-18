@@ -98,6 +98,14 @@ public final class SlimeMorphManager {
         return state != null && state.phase != Phase.IDLE;
     }
 
+    public static Slime getMorphBody(ServerPlayer player) {
+        if (player == null) {
+            return null;
+        }
+        State state = STATES.get(player.getUUID());
+        return state != null ? body(player, state) : null;
+    }
+
     /** Returns the size of the active morph, or the player's configured next-morph size. */
     public static int getCurrentMorphSize(net.minecraft.world.entity.player.Player player) {
         if (player instanceof ServerPlayer serverPlayer) {
@@ -166,7 +174,7 @@ public final class SlimeMorphManager {
 
             if (state.phase != Phase.IDLE) {
                 Slime body = body(player, state);
-                if (body == null || !body.isAlive()) {
+                if (body == null || !body.isAlive() || body.level() != player.level()) {
                     finish(player, state, false);
                     continue;
                 }
@@ -337,6 +345,16 @@ public final class SlimeMorphManager {
         }
         boolean movementRequested = length > 0.0D || input.jump();
 
+        // Prismatic Hydro-Jet Mutation perk: hydrodynamic water propulsion
+        if (body.isInWater() && SlimeFormState.hasMutation(player, SlimeFormState.MUTATION_ELDER_GUARDIAN)) {
+            if (movementRequested) {
+                float rad = (float) Math.toRadians(movementYaw);
+                double mx = -Math.sin(rad) * 0.22D;
+                double mz = Math.cos(rad) * 0.22D;
+                body.setDeltaMovement(body.getDeltaMovement().add(mx, input.jump() ? 0.12D : 0.02D, mz));
+            }
+        }
+
         // Charged leap (hold jump, release to launch) and the landing shockwave.
         float aimYaw = length > 0.0D ? movementYaw : input.yaw();
         boolean charging = state.phase == Phase.MORPHED
@@ -371,6 +389,7 @@ public final class SlimeMorphManager {
     private static void finish(ServerPlayer player, State state, boolean successfulExit) {
         Slime body = body(player, state);
         if (body != null) {
+            SlimeAbsorbManager.ejectAll(body);
             REMOVING_BODIES.add(body.getUUID());
             try {
                 body.remove(Entity.RemovalReason.DISCARDED);
@@ -378,11 +397,12 @@ public final class SlimeMorphManager {
                 REMOVING_BODIES.remove(body.getUUID());
             }
         }
+        SlimeAbsorbManager.removeFullnessSlowdown(player);
         player.removeTag(SlimeFormMod.MORPH_TAG);
         player.setInvisible(state.wasInvisible);
         player.noPhysics = state.wasNoPhysics;
         SlimeFormState.refreshMorphDimensions(player);
-        if (body != null && player.isAlive()) {
+        if (body != null && player.isAlive() && body.level() == player.level()) {
             moveToSafeExit(player);
         }
         player.setCamera(player);
@@ -530,6 +550,10 @@ public final class SlimeMorphManager {
             double nz = distance < 0.05D ? 0.0D : dz / distance;
             target.setDeltaMovement(target.getDeltaMovement().add(
                     nx * push, 0.30D + 0.25D * closeness, nz * push));
+            if (SlimeFormState.hasMutation(player, SlimeFormState.MUTATION_WITHER)) {
+                target.addEffect(new net.minecraft.world.effect.MobEffectInstance(
+                        net.minecraft.world.effect.MobEffects.WITHER, 100, 0));
+            }
 //            target.hasImpulse = true;
         }
     }
@@ -552,9 +576,31 @@ public final class SlimeMorphManager {
                 2, spread, spread, spread, 0.02D);
     }
 
+    public static Slime findBody(MinecraftServer server, State state) {
+        if (state == null || state.bodyId == null || server == null) {
+            return null;
+        }
+        for (ServerLevel level : server.getAllLevels()) {
+            Entity entity = level.getEntity(state.bodyId);
+            if (entity instanceof Slime slime && isMorphBody(slime)) {
+                return slime;
+            }
+        }
+        return null;
+    }
+
     private static Slime body(ServerPlayer player, State state) {
-        return state.bodyId != null && player.level().getEntity(state.bodyId) instanceof Slime slime
-                && isMorphBody(slime) ? slime : null;
+        if (state.bodyId == null) {
+            return null;
+        }
+        Entity entity = player.level().getEntity(state.bodyId);
+        if (entity instanceof Slime slime && isMorphBody(slime)) {
+            return slime;
+        }
+        if (player.level().getServer() != null) {
+            return findBody(player.level().getServer(), state);
+        }
+        return null;
     }
 
     private static void sendState(ServerPlayer player, State state) {

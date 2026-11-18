@@ -1,5 +1,6 @@
 package io.asy.fragmented.mixin;
 
+import io.asy.fragmented.SlimeAbsorbRendererHelper;
 import io.asy.fragmented.SlimeAppearanceRenderStateAccess;
 import io.asy.fragmented.SlimeAppearanceRendererAccess;
 import net.minecraft.client.renderer.entity.LivingEntityRenderer;
@@ -49,6 +50,10 @@ public abstract class SlimeAppearanceRendererMixin implements SlimeAppearanceRen
     @Inject(method = "getModelTint", at = @At("RETURN"), cancellable = true)
     private void slimeform$applyPlayerTransparencyAndTint(
             LivingEntityRenderState state, CallbackInfoReturnable<Integer> cir) {
+        if (SlimeAbsorbRendererHelper.isRenderingTrapped()) {
+            cir.setReturnValue(SlimeAbsorbRendererHelper.getTrappedEntityTint(state, cir.getReturnValue()));
+            return;
+        }
         if (!(state instanceof AvatarRenderState)
                 || !(state instanceof SlimeAppearanceRenderStateAccess appearance)
                 || !appearance.slimeform$isAppearanceActive()

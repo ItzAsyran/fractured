@@ -1,5 +1,7 @@
 package io.asy.fragmented.mixin;
 
+import io.asy.fragmented.SlimeAbsorbClientState;
+import io.asy.fragmented.SlimeAbsorbRenderStateAccess;
 import io.asy.fragmented.SlimeMorphRenderStateAccess;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.SubmitNodeCollector;
@@ -44,6 +46,26 @@ public abstract class SlimeMorphRendererMixin {
                 .getEntityRenderDispatcher().getRenderer(slime);
         SlimeRenderState slimeState = (SlimeRenderState) renderer.createRenderState();
         renderer.extractRenderState(slime, slimeState, 0.0F);
+
+        int playerId = morphState.slimeform$getPlayerEntityId();
+        boolean holding = SlimeAbsorbClientState.isHolding(playerId);
+        SlimeAbsorbRenderStateAccess access = (SlimeAbsorbRenderStateAccess) slimeState;
+        access.slimeform$setHolderEntityId(playerId);
+        access.slimeform$setHoldingAbsorbed(holding);
+        if (holding) {
+            access.slimeform$setTrappedEntityIds(SlimeAbsorbClientState.getTrappedIds(playerId));
+        } else {
+            access.slimeform$setTrappedEntityIds(java.util.Collections.emptyList());
+        }
+        slimeState.x = state.x;
+        slimeState.y = state.y;
+        slimeState.z = state.z;
+        slimeState.ageInTicks = state.ageInTicks;
+        slimeState.bodyRot = state.bodyRot;
+        slimeState.yRot = state.yRot;
+        slimeState.xRot = state.xRot;
+        slimeState.lightCoords = state.lightCoords;
+
         renderer.submit(slimeState, poseStack, collector, cameraState);
     }
 }

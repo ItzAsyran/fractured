@@ -1,23 +1,107 @@
 package io.asy.fragmented;
 
+import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
+import net.minecraft.ChatFormatting;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
+import net.minecraft.world.effect.MobEffectInstance;
+import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.player.Player;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+
 /** Persistent slime-form state and player attribute synchronization. */
 public final class SlimeFormState {
     public static final int MIN_SIZE = 1;
+    public static final String MUTATION_WITHER = "slimeform.mutation.wither";
+    public static final String MUTATION_ELDER_GUARDIAN = "slimeform.mutation.elder_guardian";
+    public static final String MUTATION_WARDEN = "slimeform.mutation.warden";
+
     private static final String SIZE_PREFIX = "slimeform.size.";
     private static final String MORPH_SIZE_PREFIX = "slimeform.morph_size.";
     private static final Identifier HEALTH_MODIFIER_ID =
             Identifier.fromNamespaceAndPath(SlimeFormMod.MOD_ID, "slime_form_health");
     private static volatile boolean clientPhaseEnabled;
+    private static final Set<String> clientMutations = ConcurrentHashMap.newKeySet();
 
     private SlimeFormState() {
+    }
+
+    public static boolean hasMutation(Player player, String mutation) {
+        if (player == null) {
+            return false;
+        }
+        if (player.level().isClientSide()) {
+            return clientMutations.contains(mutation) || player.entityTags().contains(mutation);
+        }
+        return player.entityTags().contains(mutation);
+    }
+
+    public static void setClientMutations(List<String> mutations) {
+        clientMutations.clear();
+        if (mutations != null) {
+            clientMutations.addAll(mutations);
+        }
+    }
+
+    public static void syncMutations(ServerPlayer player) {
+        if (player == null || player.connection == null) {
+            return;
+        }
+        List<String> active = new ArrayList<>();
+        if (player.entityTags().contains(MUTATION_WITHER)) active.add(MUTATION_WITHER);
+        if (player.entityTags().contains(MUTATION_ELDER_GUARDIAN)) active.add(MUTATION_ELDER_GUARDIAN);
+        if (player.entityTags().contains(MUTATION_WARDEN)) active.add(MUTATION_WARDEN);
+        ServerPlayNetworking.send(player, new SlimeFormPayloads.MutationSyncPayload(active));
+    }
+
+    public static void grantMutation(ServerPlayer player, String mutation) {
+        if (player == null || player.entityTags().contains(mutation)) {
+            return;
+        }
+        player.addTag(mutation);
+        syncMutations(player);
+
+        String translationKey = switch (mutation) {
+            case MUTATION_WITHER -> "slimeform.mutation.wither.unlocked";
+            case MUTATION_ELDER_GUARDIAN -> "slimeform.mutation.elder_guardian.unlocked";
+            case MUTATION_WARDEN -> "slimeform.mutation.warden.unlocked";
+            default -> "slimeform.mutation.generic.unlocked";
+        };
+        player.sendSystemMessage(Component.translatable(translationKey).withStyle(ChatFormatting.GREEN, ChatFormatting.BOLD));
+        ServerLevel level = (ServerLevel) player.level();
+        level.playSound(null, player.getX(), player.getY(), player.getZ(),
+                SoundEvents.UI_TOAST_CHALLENGE_COMPLETE, SoundSource.PLAYERS, 1.0F, 1.0F);
+    }
+
+    public static void tickPlayerMutations(ServerPlayer player) {
+        if (player == null || !player.isAlive()) {
+            return;
+        }
+        if (hasMutation(player, MUTATION_WITHER)) {
+            if (player.hasEffect(MobEffects.WITHER)) {
+                player.removeEffect(MobEffects.WITHER);
+            }
+        }
+        if (hasMutation(player, MUTATION_ELDER_GUARDIAN)) {
+            if (player.isInWater() || player.isUnderWater()) {
+                player.setAirSupply(player.getMaxAirSupply());
+                if (player.tickCount % 20 == 0) {
+                    player.addEffect(new MobEffectInstance(MobEffects.DOLPHINS_GRACE, 40, 0, true, false, true));
+                }
+            }
+        }
     }
 
     public static boolean isPhaseEnabled(Player player) {

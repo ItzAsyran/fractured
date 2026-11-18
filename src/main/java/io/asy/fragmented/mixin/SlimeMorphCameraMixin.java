@@ -1,5 +1,6 @@
 package io.asy.fragmented.mixin;
 
+import io.asy.fragmented.SlimeAbsorbClientState;
 import io.asy.fragmented.SlimeFormClient;
 import net.minecraft.client.Camera;
 import net.minecraft.client.DeltaTracker;
@@ -22,13 +23,14 @@ public abstract class SlimeMorphCameraMixin {
             method = "alignWithEntity",
             at = @At(
                     value = "INVOKE",
-                    target = "Lnet/minecraft/client/Camera;move(FFF)V"))
-    private void slimeform$usePlayerViewRotationForThirdPerson(
+                    target = "Lnet/minecraft/client/Camera;setPosition(DDD)V",
+                    shift = At.Shift.AFTER))
+    private void slimeform$usePlayerViewRotation(
             float partialTick, CallbackInfo ci) {
         Camera camera = (Camera) (Object) this;
         LocalPlayer player = Minecraft.getInstance().player;
         if (player != null && camera.entity() instanceof Slime
-                && SlimeFormClient.isLocalMorphBodyActive()) {
+                && (SlimeFormClient.isLocalMorphBodyActive() || SlimeAbsorbClientState.isTrapped(player.getId()))) {
             slimeform$setRotation(
                     player.getViewYRot(partialTick), player.getViewXRot(partialTick));
         }
@@ -45,22 +47,11 @@ public abstract class SlimeMorphCameraMixin {
             require = 0)
     private float slimeform$scaleThirdPersonDistance(float distance) {
         Camera camera = (Camera) (Object) this;
-        if (camera.entity() instanceof Slime slime && SlimeFormClient.isLocalMorphBodyActive()) {
+        LocalPlayer player = Minecraft.getInstance().player;
+        if (camera.entity() instanceof Slime slime
+                && (SlimeFormClient.isLocalMorphBodyActive() || (player != null && SlimeAbsorbClientState.isTrapped(player.getId())))) {
             return distance * Math.max(1.0F, 0.6F + 0.5F * slime.getBbWidth());
         }
         return distance;
-    }
-
-    @Inject(method = "update", at = @At("TAIL"))
-    private void slimeform$usePlayerPitchInFirstPerson(
-            DeltaTracker deltaTracker, CallbackInfo ci) {
-        Camera camera = (Camera) (Object) this;
-        LocalPlayer player = Minecraft.getInstance().player;
-        if (!camera.isDetached() && player != null && camera.entity() instanceof Slime
-                && SlimeFormClient.isLocalMorphBodyActive()) {
-            float partialTick = deltaTracker.getGameTimeDeltaPartialTick(false);
-            slimeform$setRotation(
-                    player.getViewYRot(partialTick), player.getViewXRot(partialTick));
-        }
     }
 }

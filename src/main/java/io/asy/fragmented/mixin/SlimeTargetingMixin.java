@@ -1,5 +1,6 @@
 package io.asy.fragmented.mixin;
 
+import io.asy.fragmented.SlimeAbsorbManager;
 import io.asy.fragmented.SlimeFormMod;
 import io.asy.fragmented.MagmaCubeRetaliationAccess;
 import net.minecraft.world.entity.LivingEntity;
@@ -17,6 +18,10 @@ public abstract class SlimeTargetingMixin {
 
     @Inject(method = "canAttack", at = @At("HEAD"), cancellable = true)
     private void slimeform$noTargetPlayers(LivingEntity target, CallbackInfoReturnable<Boolean> cir) {
+        if (target != null && target.entityTags().contains(SlimeAbsorbManager.ABSORBED_TAG)) {
+            cir.setReturnValue(false);
+            return;
+        }
         if ((Object) this instanceof Mob mob
                 && target instanceof Player player
                 && (player.entityTags().contains(SlimeFormMod.SLIME_DORMANT_TAG)

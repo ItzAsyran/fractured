@@ -1,5 +1,6 @@
 package io.asy.fragmented.mixin;
 
+import io.asy.fragmented.SlimeAbsorbManager;
 import io.asy.fragmented.SlimeDefenseTargetGoal;
 import io.asy.fragmented.SlimeFormMod;
 import io.asy.fragmented.MagmaCubeRetaliationAccess;
@@ -42,6 +43,11 @@ public abstract class SlimeMobTargetMixin {
 
     @Inject(method = "setTarget", at = @At("HEAD"), cancellable = true)
     private void slimeform$rejectSlimeFormPlayer(LivingEntity target, CallbackInfo ci) {
+        if (target != null && target.entityTags().contains(SlimeAbsorbManager.ABSORBED_TAG)) {
+            ci.cancel();
+            ((Mob) (Object) this).setTarget(null);
+            return;
+        }
         if ((Object) this instanceof Mob mob
                 && target instanceof Player player
                 && slimeform$isProtectedTarget(mob, player)) {
